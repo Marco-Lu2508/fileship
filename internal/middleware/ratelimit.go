@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,10 +57,8 @@ func (rl *RateLimiter) get(ip string) *rate.Limiter {
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			ip = xff
-		}
+		// Nur r.RemoteAddr verwenden — X-Forwarded-For ist fälschbar
+		ip, _, _ := strings.Cut(r.RemoteAddr, ":")
 		if !rl.get(ip).Allow() {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return

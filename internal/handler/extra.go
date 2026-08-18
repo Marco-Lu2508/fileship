@@ -41,10 +41,13 @@ func (h *Handler) zipMulti(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if len(body.Paths) > 500 {
+		http.Error(w, "too many paths (max 500)", http.StatusBadRequest)
+		return
+	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="fileship-download.zip"`)
 	if err := fsvc.ZipMulti(h.userRoot(r), body.Paths, w); err != nil {
-		// Header already sent, can't change status
 		return
 	}
 }
@@ -97,15 +100,20 @@ func (h *Handler) copyFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Path      string  `json:"path"`
-		IsDir     bool    `json:"is_dir"`
-		ExpiresIn *int    `json:"expires_in_hours,omitempty"`
+		Path      string `json:"path"`
+		IsDir     bool   `json:"is_dir"`
+		ExpiresIn *int   `json:"expires_in_hours,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	// Pfad gegen User-Root validieren
+	if _, err := fsvc.Resolve(h.userRoot(r), body.Path); err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	var expiresAt *time.Time
 	if body.ExpiresIn != nil {
 		t := time.Now().Add(time.Duration(*body.ExpiresIn) * time.Hour)

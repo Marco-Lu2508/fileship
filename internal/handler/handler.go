@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"golang.org/x/crypto/bcrypt"
@@ -30,8 +31,11 @@ func New(cfg *config.Config, database *db.DB, hub *ws.Hub) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	// Rate Limiter: 5 Requests/Sekunde, Burst 10 — nur für Auth
+	// Rate Limiter: 5 Req/s Burst 10 für Login
 	loginLimiter := middleware.NewRateLimiter(5, 10)
+	// Globaler Rate Limiter: 50 Req/s Burst 100 pro IP für alle anderen Endpoints
+	globalLimiter := middleware.NewRateLimiter(50, 100)
+	r.Use(globalLimiter.Middleware)
 
 	r.Post("/api/auth/login", loginLimiter.Middleware(http.HandlerFunc(h.login)).ServeHTTP)
 	r.Post("/api/auth/refresh", h.refresh)
@@ -84,6 +88,9 @@ func (h *Handler) Routes() http.Handler {
 }
 // --- Auth ---
 
+// dummyHash für Timing-Attack-Schutz — wird beim Login verwendet wenn User nicht existiert
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-timing-protection"), bcrypt.DefaultCost)
+
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req model.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -91,7 +98,13 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := h.db.GetUserByUsername(req.Username)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+	if err != nil {
+		// Dummy-Vergleich um Timing-Angriffe zu verhindern
+		bcrypt.CompareHashAndPassword(dummyHash, []byte(req.Password))
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -208,19 +221,28 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	files := r.MultipartForm.File["files"]
+	if len(files) > 100 {
+		http.Error(w, "too many files (max 100)", http.StatusBadRequest)
+		return
+	}
 	claims, username := h.claimsUser(r)
 	for _, fh := range files {
-		if allowedTypes != "" && !fsvc.TypeAllowed(fh.Filename, allowedTypes) {
-			http.Error(w, "file type not allowed: "+fh.Filename, http.StatusForbidden)
+		// filepath.Base entfernt alle Pfad-Komponenten — verhindert Path Traversal
+		safeName := filepath.Base(fh.Filename)
+		if safeName == "." || safeName == "" {
+			continue
+		}
+		if allowedTypes != "" && !fsvc.TypeAllowed(safeName, allowedTypes) {
+			http.Error(w, "file type not allowed: "+safeName, http.StatusForbidden)
 			return
 		}
 		f, err := fh.Open()
 		if err != nil {
 			continue
 		}
-		fsvc.SaveUpload(root, dir+"/"+fh.Filename, f)
+		fsvc.SaveUpload(root, dir+"/"+safeName, f)
 		f.Close()
-		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+fh.Filename, r.RemoteAddr)
+		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+safeName, r.RemoteAddr)
 	}
 	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: dir})
 	w.WriteHeader(http.StatusCreated)
@@ -335,6 +357,23 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
+	}
+	// Eigenen Account nicht löschen
+	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	if claims.UserID == id {
+		http.Error(w, "cannot delete your own account", http.StatusBadRequest)
+		return
+	}
+	// Letzten Admin nicht löschen
+	var adminCount int
+	h.db.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1").Scan(&adminCount)
+	if adminCount <= 1 {
+		var isAdmin bool
+		h.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", id).Scan(&isAdmin)
+		if isAdmin {
+			http.Error(w, "cannot delete the last admin", http.StatusBadRequest)
+			return
+		}
 	}
 	h.db.DeleteUser(id)
 	w.WriteHeader(http.StatusNoContent)

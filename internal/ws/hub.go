@@ -3,27 +3,43 @@ package ws
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/yourname/fileship/internal/model"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
 type Hub struct {
 	mu      sync.RWMutex
 	clients map[*websocket.Conn]struct{}
+	allowedHost string
 }
 
-func NewHub() *Hub {
-	return &Hub{clients: make(map[*websocket.Conn]struct{})}
+func NewHub(allowedHost string) *Hub {
+	return &Hub{
+		clients:     make(map[*websocket.Conn]struct{}),
+		allowedHost: allowedHost,
+	}
+}
+
+func (h *Hub) upgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // native clients
+			}
+			// Origin muss mit dem Host übereinstimmen
+			return r.Host == r.Header.Get("Host") ||
+				strings.Contains(origin, r.Host)
+		},
+	}
 }
 
 func (h *Hub) Handle(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	up := h.upgrader()
+	conn, err := up.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}

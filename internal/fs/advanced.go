@@ -12,6 +12,8 @@ import (
 	"github.com/disintegration/imaging"
 )
 
+const maxUnzipSize = 2 << 30 // 2GB Limit
+
 // Unzip entpackt ein ZIP-Archiv in das Zielverzeichnis
 func Unzip(root, zipRel, destRel string) error {
 	zipAbs, err := Resolve(root, zipRel)
@@ -29,8 +31,8 @@ func Unzip(root, zipRel, destRel string) error {
 	}
 	defer r.Close()
 
+	var totalSize int64
 	for _, f := range r.File {
-		// Sicherheit: Path Traversal verhindern
 		target := filepath.Join(destAbs, filepath.Clean("/"+f.Name))
 		if !strings.HasPrefix(target, filepath.Clean(destAbs)+string(os.PathSeparator)) {
 			return fmt.Errorf("illegal path in zip: %s", f.Name)
@@ -56,11 +58,16 @@ func Unzip(root, zipRel, destRel string) error {
 			return err
 		}
 
-		_, err = io.Copy(out, rc)
+		// ZIP Bomb Schutz: maximal maxUnzipSize pro Datei und insgesamt
+		n, err := io.Copy(out, io.LimitReader(rc, maxUnzipSize-totalSize))
+		totalSize += n
 		rc.Close()
 		out.Close()
 		if err != nil {
 			return err
+		}
+		if totalSize >= maxUnzipSize {
+			return fmt.Errorf("zip extraction limit exceeded (max 2GB)")
 		}
 	}
 	return nil

@@ -6,10 +6,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 
-	"github.com/yourname/fileship/internal/auth"
 	fsvc "github.com/yourname/fileship/internal/fs"
-	"github.com/yourname/fileship/internal/middleware"
 	"github.com/yourname/fileship/internal/model"
 )
 // --- Unzip ---
@@ -69,22 +68,14 @@ func (h *Handler) writeText(w http.ResponseWriter, r *http.Request) {
 // --- Thumbnails ---
 
 func (h *Handler) thumbnail(w http.ResponseWriter, r *http.Request) {
-	// Token auch aus Query-Parameter akzeptieren (für img src)
-	if token := r.URL.Query().Get("token"); token != "" {
-		claims, err := auth.ParseAccessToken(h.cfg.JWTSecret, token)
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		_ = claims
-	}
-
+	// Token NUR aus Authorization Header — nie aus URL Query
+	// Der Endpoint liegt hinter der Auth-Middleware, claims sind bereits im Context
 	rel := r.URL.Query().Get("path")
 	root := h.userRoot(r)
 	thumbDir := thumbDirFromDB(h.cfg.DBPath)
 
 	if thumbName, ok := fsvc.ThumbnailExists(thumbDir, rel); ok {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", "private, max-age=3600")
 		http.ServeFile(w, r, filepath.Join(thumbDir, thumbName))
 		return
 	}
@@ -100,14 +91,14 @@ func (h *Handler) thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
 	http.ServeFile(w, r, filepath.Join(thumbDir, thumbName))
 }
 
 // --- Settings (User-Einstellungen) ---
 
 func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	claims, _ := h.claimsUser(r)
 	quota, allowedTypes, err := h.db.GetUserQuotaAndTypes(claims.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -127,6 +118,9 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 
 // --- i18n: Sprache aus Accept-Language ---
 
+// validLang erlaubt nur 2-Buchstaben Sprach-Codes
+var validLang = regexp.MustCompile(`^[a-z]{2}$`)
+
 func (h *Handler) i18n(w http.ResponseWriter, r *http.Request) {
 	lang := r.URL.Query().Get("lang")
 	if lang == "" {
@@ -134,6 +128,10 @@ func (h *Handler) i18n(w http.ResponseWriter, r *http.Request) {
 		if len(accept) >= 2 {
 			lang = accept[:2]
 		}
+	}
+	// Whitelist: nur a-z, genau 2 Zeichen
+	if !validLang.MatchString(lang) {
+		lang = "en"
 	}
 	langFile := filepath.Join("./frontend/dist/locales", lang+".json")
 	if _, err := os.Stat(langFile); err != nil {
