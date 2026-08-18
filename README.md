@@ -1,8 +1,8 @@
 # Fileship
 
-A fast, self-hosted file browser — spiritual successor to [filebrowser](https://github.com/filebrowser/filebrowser).
+A fast, self-hosted file browser. Spiritual successor to [filebrowser](https://github.com/filebrowser/filebrowser).
 
-**Stack**: Go · Svelte 5 · SQLite · JWT · WebSocket · Docker
+![Go](https://img.shields.io/badge/Go-1.23-blue) ![Svelte](https://img.shields.io/badge/Svelte-5-orange) ![License](https://img.shields.io/badge/license-MIT-green) ![Docker](https://img.shields.io/badge/docker-ready-blue)
 
 ---
 
@@ -12,15 +12,32 @@ A fast, self-hosted file browser — spiritual successor to [filebrowser](https:
 docker compose up -d
 ```
 
-Open **http://localhost:8080** and login with `admin` / `admin`.
+Open **http://localhost:8080** — login with `admin` / `admin`
 
-> **Change the password immediately** in the admin panel after first login!
+> ⚠️ Change the admin password after first login!
+
+---
+
+## Features
+
+- 📁 Browse, upload, download, rename, delete files
+- 📦 Download folders as ZIP
+- 👥 Multi-user with per-user home directories and storage quotas
+- 🔗 Public share links (no login required)
+- 🖼️ Image, video and audio preview
+- ✏️ Built-in text editor
+- 🌐 WebDAV support
+- 🎨 5 themes: Dark, Light, Nord, Solarized, Gruvbox
+- ⚡ Live updates via WebSocket
+- 🔐 JWT auth with auto-refresh
+- 📋 Audit log
+- 💾 SQLite — no database server needed
 
 ---
 
 ## Configuration
 
-Create a `.env` file to customize:
+Create a `.env` file next to your `docker-compose.yml`:
 
 ```env
 ADMIN_PASSWORD=your-secure-password
@@ -29,34 +46,25 @@ MAX_UPLOAD_MB=1024
 PORT=8080
 ```
 
-Or set environment variables directly in `docker-compose.yml`.
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | HTTP port |
+| `JWT_SECRET` | auto-generated | Secret for JWT signing |
+| `ADMIN_PASSWORD` | auto-generated | Initial admin password (printed to logs) |
+| `ROOT_PATH` | `/data` | Root directory for files |
+| `DB_PATH` | `/app/fileship.db` | SQLite database path |
+| `MAX_UPLOAD_MB` | `1024` | Max upload size in MB |
+| `TLS_CERT` | — | Path to TLS certificate (enables HTTPS) |
+| `TLS_KEY` | — | Path to TLS private key |
 
 ---
 
-## Features
-
-- Browse, upload, download, rename, delete files
-- Drag & drop upload with progress
-- Download folders as ZIP
-- Multi-user with per-user home directories and quotas
-- JWT authentication with auto-refresh
-- Live updates via WebSocket
-- 5 themes: Dark, Light, Nord, Solarized, Gruvbox
-- Text editor with syntax highlighting
-- Image/video/audio preview
-- Share links (public, no login required)
-- WebDAV support
-- Audit log
-- SQLite — no database server needed
-
----
-
-## Docker Compose
+## Self-hosted with Docker
 
 ```yaml
 services:
   fileship:
-    image: ghcr.io/Marco-Lu2508/fileship:latest
+    image: ghcr.io/marco-lu2508/fileship:latest
     ports:
       - "8080:8080"
     volumes:
@@ -72,42 +80,16 @@ volumes:
   fileship-db:
 ```
 
-Or clone the repo and build yourself:
-
-```bash
-git clone https://github.com/Marco-Lu2508/fileship.git
-cd fileship
-docker compose up -d
-```
-
----
-
-## Configuration Reference
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8080` | HTTP port |
-| `JWT_SECRET` | random | Secret for JWT signing (auto-generated if not set) |
-| `DB_PATH` | `/app/fileship.db` | SQLite database path |
-| `ROOT_PATH` | `/data` | Root directory for files |
-| `ADMIN_PASSWORD` | random | Initial admin password (printed to logs if not set) |
-| `MAX_UPLOAD_MB` | `1024` | Max upload size in MB |
-| `TLS_CERT` | — | Path to TLS certificate (enables HTTPS) |
-| `TLS_KEY` | — | Path to TLS private key |
-
 ---
 
 ## Development
 
 ```bash
-# Backend (Go)
-export PATH=$PATH:/usr/local/go/bin
+# Backend
 go run ./cmd/fileship
 
-# Frontend (Svelte)
-cd frontend
-npm install
-npm run dev
+# Frontend
+cd frontend && npm install && npm run dev
 ```
 
 ---
