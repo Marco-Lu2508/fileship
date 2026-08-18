@@ -1,0 +1,154 @@
+<script>
+  import { onMount } from 'svelte'
+  import { apiFetch } from '../stores/auth.js'
+  import { success, error } from '../stores/toast.js'
+  import { locale } from '../stores/i18n.js'
+
+  export let onClose = () => {}
+
+  let settings = null
+  let oldPassword = ''
+  let newPassword = ''
+  let newPassword2 = ''
+  let saving = false
+
+  onMount(async () => {
+    const res = await apiFetch('/api/me/settings')
+    if (res.ok) settings = await res.json()
+  })
+
+  async function changePassword() {
+    if (newPassword !== newPassword2) { error('Passwords do not match'); return }
+    if (newPassword.length < 8) { error('Password too short (min 8 chars)'); return }
+    saving = true
+    const res = await apiFetch('/api/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+    })
+    saving = false
+    if (res.ok) {
+      success('Password changed')
+      oldPassword = newPassword = newPassword2 = ''
+    } else {
+      error(await res.text())
+    }
+  }
+
+  function formatBytes(b) {
+    if (!b) return 'No limit'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(b) / Math.log(1024))
+    return (b / Math.pow(1024, i)).toFixed(1) + ' ' + units[i]
+  }
+
+  $: webdavUrl = `${location.origin}/webdav`
+  $: usedPct = settings?.quota_bytes > 0
+    ? Math.min(100, Math.round((settings.disk_usage / settings.quota_bytes) * 100))
+    : null
+</script>
+
+<div class="overlay" role="dialog" aria-modal="true">
+  <div class="settings-modal">
+    <div class="settings-header">
+      <span>⚙️ Settings</span>
+      <button class="close" onclick={onClose}>✕</button>
+    </div>
+
+    <div class="settings-body">
+
+      <!-- Storage -->
+      <section>
+        <h3>💾 Storage</h3>
+        {#if settings}
+          <div class="info-row">
+            <span>Used</span>
+            <span>{formatBytes(settings.disk_usage)}</span>
+          </div>
+          <div class="info-row">
+            <span>Quota</span>
+            <span>{formatBytes(settings.quota_bytes)}</span>
+          </div>
+          {#if usedPct !== null}
+            <div class="quota-bar">
+              <div class="quota-fill" style="width:{usedPct}%" class:warn={usedPct > 80} class:crit={usedPct > 95}></div>
+            </div>
+            <p class="quota-pct">{usedPct}% used</p>
+          {/if}
+          {#if settings.allowed_types}
+            <div class="info-row">
+              <span>Allowed types</span>
+              <span class="mono">{settings.allowed_types}</span>
+            </div>
+          {/if}
+        {:else}
+          <p class="muted">Loading…</p>
+        {/if}
+      </section>
+
+      <!-- WebDAV -->
+      <section>
+        <h3>🔗 WebDAV</h3>
+        <p class="muted">Connect with Finder, Windows Explorer, Cyberduck or any WebDAV client:</p>
+        <div class="webdav-url">
+          <code>{webdavUrl}</code>
+          <button onclick={() => { navigator.clipboard.writeText(webdavUrl); success('Copied!') }}>📋</button>
+        </div>
+        <p class="muted small">Use your Fileship username and password to authenticate.</p>
+      </section>
+
+      <!-- Language -->
+      <section>
+        <h3>🌍 Language</h3>
+        <select bind:value={$locale}>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </section>
+
+      <!-- Password -->
+      <section>
+        <h3>🔐 Change Password</h3>
+        <div class="form">
+          <input type="password" placeholder="Current password" bind:value={oldPassword} />
+          <input type="password" placeholder="New password (min 8 chars)" bind:value={newPassword} />
+          <input type="password" placeholder="Confirm new password" bind:value={newPassword2} />
+          <button onclick={changePassword} disabled={saving}>
+            {saving ? 'Saving…' : 'Change Password'}
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 800; padding: 1rem; }
+  .settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+  .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); font-size: 1rem; font-weight: 600; color: var(--text); }
+  .close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
+  .settings-body { overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1.5rem; }
+  section { display: flex; flex-direction: column; gap: 0.6rem; }
+  h3 { font-size: 0.9rem; font-weight: 600; color: var(--text); margin: 0; }
+  .info-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--muted); }
+  .info-row span:last-child { color: var(--text); }
+  .quota-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .quota-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+  .quota-fill.warn { background: #f59e0b; }
+  .quota-fill.crit { background: var(--danger); }
+  .quota-pct { font-size: 0.8rem; color: var(--muted); }
+  .webdav-url { display: flex; align-items: center; gap: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; }
+  code { flex: 1; font-size: 0.85rem; color: var(--accent); font-family: monospace; word-break: break-all; }
+  .webdav-url button { background: none; border: none; cursor: pointer; font-size: 1rem; flex-shrink: 0; }
+  select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+  .form { display: flex; flex-direction: column; gap: 0.6rem; }
+  input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+  input:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--accent); border: none; color: #fff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+  button:hover:not(:disabled) { background: var(--accent-h); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .muted { font-size: 0.85rem; color: var(--muted); }
+  .small { font-size: 0.8rem; }
+  .mono { font-family: monospace; font-size: 0.85rem; }
+</style>

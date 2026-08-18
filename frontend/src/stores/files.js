@@ -1,0 +1,53 @@
+import { writable } from 'svelte/store'
+import { apiFetch } from './auth.js'
+
+export const files = writable([])
+export const currentPath = writable('')
+export const loading = writable(false)
+export const selected = writable(new Set())
+
+export async function loadFiles(path = '') {
+  loading.set(true)
+  currentPath.set(path)
+  selected.set(new Set())
+  const res = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`)
+  if (res.ok) files.set(await res.json())
+  loading.set(false)
+}
+
+export async function mkdir(path) {
+  await apiFetch('/api/files/mkdir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path })
+  })
+}
+
+export async function deleteFile(path) {
+  await apiFetch(`/api/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
+}
+
+export async function renameFile(oldPath, newPath) {
+  await apiFetch('/api/files/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old: oldPath, new: newPath })
+  })
+}
+
+export async function uploadFiles(path, fileList) {
+  const form = new FormData()
+  form.append('path', path)
+  for (const f of fileList) form.append('files', f)
+  await apiFetch('/api/files/upload', { method: 'POST', body: form })
+}
+
+export function downloadUrl(path) {
+  const token = localStorage.getItem('access_token')
+  return `/api/files/download?path=${encodeURIComponent(path)}&token=${token}`
+}
+
+export function zipUrl(path) {
+  const token = localStorage.getItem('access_token')
+  return `/api/files/zip?path=${encodeURIComponent(path)}&token=${token}`
+}

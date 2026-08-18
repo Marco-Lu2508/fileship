@@ -1,0 +1,333 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/yourname/fileship/internal/auth"
+	"github.com/yourname/fileship/internal/config"
+	"github.com/yourname/fileship/internal/db"
+	fsvc "github.com/yourname/fileship/internal/fs"
+	"github.com/yourname/fileship/internal/middleware"
+	"github.com/yourname/fileship/internal/model"
+	"github.com/yourname/fileship/internal/ws"
+)
+
+type Handler struct {
+	cfg *config.Config
+	db  *db.DB
+	hub *ws.Hub
+}
+
+func New(cfg *config.Config, database *db.DB, hub *ws.Hub) *Handler {
+	return &Handler{cfg: cfg, db: database, hub: hub}
+}
+
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+
+	// Rate Limiter: 5 Requests/Sekunde, Burst 10 — nur für Auth
+	loginLimiter := middleware.NewRateLimiter(5, 10)
+
+	r.Post("/api/auth/login", loginLimiter.Middleware(http.HandlerFunc(h.login)).ServeHTTP)
+	r.Post("/api/auth/refresh", h.refresh)
+	r.Post("/api/auth/logout", h.logout)
+	r.Get("/s/{token}", h.PublicShare)
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(h.cfg.JWTSecret))
+
+		r.Get("/api/files", h.listFiles)
+		r.Post("/api/files/upload", h.uploadFile)
+		r.Delete("/api/files", h.deleteFile)
+		r.Post("/api/files/mkdir", h.mkdir)
+		r.Post("/api/files/rename", h.renameFile)
+		r.Post("/api/files/copy", h.copyFile)
+		r.Get("/api/files/download", h.downloadFile)
+		r.Post("/api/files/zip-multi", h.zipMulti)
+		r.Get("/api/files/zip", h.zipDir)
+		r.Post("/api/files/move", h.moveFile)
+		r.Get("/api/files/search", h.searchFiles)
+		r.Post("/api/files/unzip", h.unzipFile)
+		r.Get("/api/files/text", h.readText)
+		r.Put("/api/files/text", h.writeText)
+		r.Get("/api/files/thumb", h.thumbnail)
+		r.Get("/api/i18n", h.i18n)
+
+		r.Get("/api/me", h.me)
+		r.Post("/api/me/password", h.changePassword)
+		r.Get("/api/me/settings", h.getSettings)
+
+		r.Get("/api/shares", h.listShares)
+		r.Post("/api/shares", h.createShare)
+		r.Delete("/api/shares/{token}", h.deleteShare)
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AdminOnly)
+			r.Get("/api/users", h.listUsers)
+			r.Post("/api/users", h.createUser)
+			r.Delete("/api/users/{id}", h.deleteUser)
+			r.Patch("/api/users/{id}", h.updateUser)
+			r.Put("/api/users/{id}/quota", h.setQuota)
+			r.Get("/api/audit", h.auditLog)
+			r.Get("/api/stats", h.stats)
+		})
+
+		r.Get("/ws", h.hub.Handle)
+	})
+
+	r.Handle("/webdav/*", http.HandlerFunc(h.WebDAV))
+
+	return r
+}
+
+// --- Auth ---
+
+func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	var req model.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	user, err := h.db.GetUserByUsername(req.Username)
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	access, err := auth.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.IsAdmin)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	refresh, expires, err := auth.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	h.db.SaveRefreshToken(refresh, user.ID, expires)
+	json.NewEncoder(w).Encode(model.TokenPair{AccessToken: access, RefreshToken: refresh})
+}
+
+func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	userID, err := h.db.GetRefreshToken(body.RefreshToken)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	user, err := h.db.GetUserByID(userID)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+	h.db.DeleteRefreshToken(body.RefreshToken)
+	access, _ := auth.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.IsAdmin)
+	newRefresh, expires, _ := auth.GenerateRefreshToken()
+	h.db.SaveRefreshToken(newRefresh, user.ID, expires)
+	json.NewEncoder(w).Encode(model.TokenPair{AccessToken: access, RefreshToken: newRefresh})
+}
+
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	h.db.DeleteRefreshToken(body.RefreshToken)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Files ---
+
+func (h *Handler) userRoot(r *http.Request) string {
+	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	user, err := h.db.GetUserByID(claims.UserID)
+	if err != nil {
+		return h.cfg.RootPath
+	}
+	return h.resolveRoot(user.RootPath)
+}
+
+func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	perPage, _ := strconv.Atoi(q.Get("per_page"))
+	sortAsc := q.Get("sort_asc") != "false"
+
+	opts := model.ListOptions{
+		Path:    q.Get("path"),
+		Search:  q.Get("search"),
+		SortBy:  q.Get("sort_by"),
+		SortAsc: sortAsc,
+		Page:    page,
+		PerPage: perPage,
+	}
+	result, err := fsvc.ListPaged(h.userRoot(r), opts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadSize)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	dir := r.FormValue("path")
+	root := h.userRoot(r)
+	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+
+	// Quota + Typ-Check
+	quota, allowedTypes, _ := h.db.GetUserQuotaAndTypes(claims.UserID)
+	if quota > 0 {
+		usage, _ := fsvc.DirSize(root)
+		if usage >= quota {
+			http.Error(w, "storage quota exceeded", http.StatusForbidden)
+			return
+		}
+	}
+
+	files := r.MultipartForm.File["files"]
+	for _, fh := range files {
+		if allowedTypes != "" && !fsvc.TypeAllowed(fh.Filename, allowedTypes) {
+			http.Error(w, "file type not allowed: "+fh.Filename, http.StatusForbidden)
+			return
+		}
+		f, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		fsvc.SaveUpload(root, dir+"/"+fh.Filename, f)
+		f.Close()
+		h.db.LogAction(claims.UserID, "", "upload", dir+"/"+fh.Filename, r.RemoteAddr)
+	}
+	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: dir})
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if err := fsvc.Delete(h.userRoot(r), path); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.hub.Broadcast(model.WSEvent{Type: "delete", Path: path})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) mkdir(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Path string `json:"path"` }
+	json.NewDecoder(r.Body).Decode(&body)
+	if err := fsvc.Mkdir(h.userRoot(r), body.Path); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.hub.Broadcast(model.WSEvent{Type: "mkdir", Path: body.Path})
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) renameFile(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Old string `json:"old"`
+		New string `json:"new"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	if err := fsvc.Rename(h.userRoot(r), body.Old, body.New); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.hub.Broadcast(model.WSEvent{Type: "rename", Path: body.New})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	root := h.userRoot(r)
+	abs, err := fsvc.Resolve(root, rel)
+	if err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	mime, _ := fsvc.DetectMime(root, rel)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "attachment")
+	http.ServeFile(w, r, abs)
+}
+
+func (h *Handler) zipDir(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="download.zip"`)
+	if err := fsvc.ZipDir(h.userRoot(r), path, w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// --- Me ---
+
+func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
+	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	user, err := h.db.GetUserByID(claims.UserID)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
+// --- Users (Admin) ---
+
+func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := h.db.ListUsers()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		IsAdmin  bool   `json:"is_admin"`
+		RootPath string `json:"root_path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if body.RootPath == "" {
+		body.RootPath = "/"
+	}
+	if err := h.db.CreateUser(body.Username, body.Password, body.IsAdmin, body.RootPath); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	h.db.DeleteUser(id)
+	w.WriteHeader(http.StatusNoContent)
+}

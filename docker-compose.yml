@@ -1,0 +1,20 @@
+services:
+  fileship:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - fileship-data:/data
+      - fileship-db:/app
+    environment:
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - ROOT_PATH=/data
+      - DB_PATH=/app/fileship.db
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-1024}
+    restart: unless-stopped
+
+volumes:
+  fileship-data:
+  fileship-db:
