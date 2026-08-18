@@ -9,12 +9,14 @@ A fast, self-hosted file browser. Spiritual successor to [filebrowser](https://g
 ## Quick Start
 
 ```bash
+git clone https://github.com/Marco-Lu2508/fileship.git
+cd fileship
+cp .env.example .env
+# .env öffnen und ADMIN_PASSWORD + JWT_SECRET setzen
 docker compose up -d
 ```
 
-Open **http://localhost:8080** — login with `admin` / `admin`
-
-> ⚠️ Change the admin password after first login!
+Open **http://localhost:8080** and login with your configured credentials.
 
 ---
 
@@ -37,7 +39,7 @@ Open **http://localhost:8080** — login with `admin` / `admin`
 
 ## Configuration
 
-Create a `.env` file next to your `docker-compose.yml`:
+Edit `.env` before starting:
 
 ```env
 ADMIN_PASSWORD=your-secure-password
@@ -56,29 +58,6 @@ PORT=8080
 | `MAX_UPLOAD_MB` | `1024` | Max upload size in MB |
 | `TLS_CERT` | — | Path to TLS certificate (enables HTTPS) |
 | `TLS_KEY` | — | Path to TLS private key |
-
----
-
-## Self-hosted with Docker
-
-```yaml
-services:
-  fileship:
-    image: ghcr.io/marco-lu2508/fileship:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - fileship-data:/data
-      - fileship-db:/app
-    environment:
-      - ADMIN_PASSWORD=admin
-      - JWT_SECRET=change-me-in-production
-    restart: unless-stopped
-
-volumes:
-  fileship-data:
-  fileship-db:
-```
 
 ---
 
