@@ -4,31 +4,33 @@
   import { user, logout, apiFetch } from '../stores/auth.js'
   import { connectWS, disconnectWS } from '../stores/ws.js'
   import { success, error } from '../stores/toast.js'
-  import { theme } from '../stores/theme.js'
   import { get } from 'svelte/store'
-  import Breadcrumb from './Breadcrumb.svelte'
-  import Dropzone from './Dropzone.svelte'
-  import FileRow from './FileRow.svelte'
-  import Preview from './Preview.svelte'
+  import Breadcrumb  from './Breadcrumb.svelte'
+  import Dropzone    from './Dropzone.svelte'
+  import FileRow     from './FileRow.svelte'
+  import Preview     from './Preview.svelte'
   import ShareDialog from './ShareDialog.svelte'
-  import Toast from './Toast.svelte'
-  import Skeleton from './Skeleton.svelte'
-  import Editor from './Editor.svelte'
-  import Settings from './Settings.svelte'
+  import Toast       from './Toast.svelte'
+  import Skeleton    from './Skeleton.svelte'
+  import Editor      from './Editor.svelte'
+  import Settings    from './Settings.svelte'
+  import ThemePicker from './ThemePicker.svelte'
+  import Icon        from './Icon.svelte'
 
-  let showNewFolder = false
-  let newFolderName = ''
-  let sortKey = 'name'
-  let sortAsc = true
-  let searchQuery = ''
-  let searchResults = null
-  let searchLoading = false
-  let previewFile = null
-  let shareFile = null
-  let editorFile = null
-  let showSettings = false
-  let searchTimeout = null
-  let dragOverPath = null   // für Drag&Drop zwischen Ordnern
+  let showNewFolder  = false
+  let newFolderName  = ''
+  let sortKey        = 'name'
+  let sortAsc        = true
+  let searchQuery    = ''
+  let searchResults  = null
+  let searchLoading  = false
+  let previewFile    = null
+  let shareFile      = null
+  let editorFile     = null
+  let showSettings   = false
+  let showThemePicker = false
+  let searchTimeout  = null
+  let dragOverPath   = null
 
   onMount(() => {
     loadFiles('')
@@ -36,35 +38,15 @@
     return disconnectWS
   })
 
-  // --- Keyboard Shortcuts ---
   function onKeydown(e) {
-    // Kein Shortcut wenn in einem Input
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-
-    switch(e.key) {
-      case 'n':
-        if (e.ctrlKey || e.metaKey) { e.preventDefault(); showNewFolder = true }
-        break
-      case 'Delete':
-      case 'Backspace':
-        if (get(selected).size > 0) deleteSelected()
-        break
-      case 'Escape':
-        selected.set(new Set())
-        searchQuery = ''
-        searchResults = null
-        showNewFolder = false
-        break
-      case 'a':
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault()
-          selected.set(new Set(displayFiles.map(f => f.path)))
-        }
-        break
-      case 'r':
-        if (e.key === 'r' && !e.ctrlKey) loadFiles(get(currentPath))
-        break
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'n') { e.preventDefault(); showNewFolder = true }
+      if (e.key === 'a') { e.preventDefault(); selected.set(new Set(displayFiles.map(f => f.path))) }
     }
+    if (e.key === 'Delete' && get(selected).size > 0) deleteSelected()
+    if (e.key === 'Escape') { selected.set(new Set()); searchQuery = ''; searchResults = null; showNewFolder = false }
+    if (e.key === 'r' && !e.ctrlKey && !e.metaKey) loadFiles(get(currentPath))
   }
 
   async function handleMkdir() {
@@ -74,9 +56,7 @@
       await mkdir(path ? path + '/' + newFolderName : newFolderName)
       await loadFiles(path)
       success(`Folder "${newFolderName}" created`)
-    } catch {
-      error('Could not create folder')
-    }
+    } catch { error('Could not create folder') }
     newFolderName = ''
     showNewFolder = false
   }
@@ -95,51 +75,37 @@
     const token = localStorage.getItem('access_token')
     const res = await fetch('/api/files/zip-multi', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ paths })
     })
     if (!res.ok) { error('Download failed'); return }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = 'fileship-download.zip'
-    a.click()
+    a.href = url; a.download = 'download.zip'; a.click()
     URL.revokeObjectURL(url)
   }
 
-  // --- Drag & Drop zwischen Ordnern ---
-  async function handleDragOver(e, targetPath) {
-    e.preventDefault()
-    dragOverPath = targetPath
-  }
+  async function handleDragOver(e, targetPath) { e.preventDefault(); dragOverPath = targetPath }
 
   async function handleDrop(e, targetPath) {
-    e.preventDefault()
-    dragOverPath = null
+    e.preventDefault(); dragOverPath = null
     const srcPath = e.dataTransfer.getData('fileship/path')
     if (!srcPath || srcPath === targetPath) return
     const name = srcPath.split('/').pop()
-    const dst = targetPath ? targetPath + '/' + name : name
-    const res = await apiFetch('/api/files/move', {
+    const dst  = targetPath ? targetPath + '/' + name : name
+    const res  = await apiFetch('/api/files/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ src: srcPath, dst })
     })
-    if (res.ok) {
-      await loadFiles(get(currentPath))
-      success(`Moved to ${targetPath || 'root'}`)
-    } else {
-      error('Move failed')
-    }
+    if (res.ok) { await loadFiles(get(currentPath)); success(`Moved`) }
+    else error('Move failed')
   }
 
   function setSort(key) {
-    if (sortKey === key) sortAsc = !sortAsc
-    else { sortKey = key; sortAsc = true }
+    sortAsc = sortKey === key ? !sortAsc : true
+    sortKey = key
   }
 
   function onSearch() {
@@ -154,7 +120,6 @@
   }
 
   $: displayFiles = searchResults !== null ? searchResults : ($files?.files || [])
-
   $: sorted = [...displayFiles].sort((a, b) => {
     if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1
     let av = a[sortKey], bv = b[sortKey]
@@ -162,94 +127,143 @@
     if (typeof bv === 'string') bv = bv.toLowerCase()
     return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
   })
-
   $: totalFiles = $files?.total ?? 0
-  $: showing = sorted.length
-  $: isDark = $theme === 'dark'
 </script>
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="browser">
-  <header>
-    <div class="brand">🚀 Fileship</div>
-    <div class="search-wrap">
-      <input
-        class="search"
-        placeholder="🔍 Search files… (type to search)"
-        bind:value={searchQuery}
-        oninput={onSearch}
-      />
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <Icon name="home" size={16} />
+      <span>Fileship</span>
     </div>
-    <div class="user-info">
-      <button class="theme-btn" onclick={() => theme.set(isDark ? 'light' : 'dark')} title="Toggle theme">
-        {isDark ? '☀️' : '🌙'}
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick={() => loadFiles('')}>
+        <Icon name="folder" size={15} />
+        <span>Files</span>
       </button>
-      <span class="username">{$user?.username}</span>
       {#if $user?.is_admin}
-        <a href="/admin" class="admin-link">⚙️ Admin</a>
+        <a class="nav-item" href="/admin">
+          <Icon name="users" size={15} />
+          <span>Admin</span>
+        </a>
       {/if}
-      <button onclick={() => showSettings = true}>⚙️ Settings</button>
-      <button onclick={logout}>Sign out</button>
+      <button class="nav-item" onclick={() => showSettings = true}>
+        <Icon name="settings" size={15} />
+        <span>Settings</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <Icon name="user" size={14} />
+        <span class="username">{$user?.username}</span>
+      </div>
+      <button class="icon-btn" onclick={() => showThemePicker = !showThemePicker} title="Theme">
+        <Icon name="palette" size={14} />
+      </button>
+      <button class="icon-btn" onclick={logout} title="Sign out">
+        <Icon name="logout" size={14} />
+      </button>
     </div>
-  </header>
+  </aside>
 
-  <main>
+  <!-- Main -->
+  <div class="main">
+    <!-- Toolbar -->
     <div class="toolbar">
       <Breadcrumb path={$currentPath} />
-      <div class="actions">
-        {#if $selected.size > 0}
-          <button class="btn" onclick={downloadSelected}>🗜️ ZIP ({$selected.size})</button>
-          <button class="btn danger" onclick={deleteSelected}>🗑️ Delete ({$selected.size})</button>
-        {/if}
-        <button class="btn" onclick={() => showNewFolder = !showNewFolder} title="Ctrl+N">📁 New Folder</button>
+      <div class="toolbar-right">
+        <div class="search-wrap">
+          <span class="search-icon"><Icon name="search" size={14} /></span>
+          <input
+            class="search"
+            placeholder="Search..."
+            bind:value={searchQuery}
+            oninput={onSearch}
+            aria-label="Search files"
+          />
+        </div>
+        <div class="actions">
+          {#if $selected.size > 0}
+            <button class="btn" onclick={downloadSelected} title="Download as ZIP">
+              <Icon name="download" size={14} />
+              <span>ZIP ({$selected.size})</span>
+            </button>
+            <button class="btn danger" onclick={deleteSelected}>
+              <Icon name="trash" size={14} />
+              <span>Delete ({$selected.size})</span>
+            </button>
+          {/if}
+          <button class="btn primary" onclick={() => showNewFolder = !showNewFolder} title="New Folder (Ctrl+N)">
+            <Icon name="plus" size={14} />
+            <span>New Folder</span>
+          </button>
+        </div>
       </div>
     </div>
 
+    <!-- New Folder Input -->
     {#if showNewFolder}
-      <div class="new-folder">
+      <div class="new-folder-bar">
+        <Icon name="folder" size={14} />
         <input
           placeholder="Folder name"
           bind:value={newFolderName}
           onkeydown={(e) => { if (e.key === 'Enter') handleMkdir(); if (e.key === 'Escape') showNewFolder = false }}
           autofocus
         />
-        <button onclick={handleMkdir}>Create</button>
-        <button class="cancel" onclick={() => showNewFolder = false}>Cancel</button>
+        <button class="btn primary" onclick={handleMkdir}>Create</button>
+        <button class="btn" onclick={() => showNewFolder = false}>Cancel</button>
       </div>
     {/if}
 
     <Dropzone />
 
+    <!-- File Table -->
     <div class="table-wrap">
       {#if $loading || searchLoading}
-        <Skeleton rows={10} />
+        <Skeleton rows={12} />
       {:else if sorted.length === 0}
         <div class="empty">
-          {searchQuery ? `No results for "${searchQuery}"` : 'This folder is empty'}
+          <Icon name="folder" size={32} />
+          <p>{searchQuery ? `No results for "${searchQuery}"` : 'This folder is empty'}</p>
         </div>
       {:else}
         <div class="table-meta">
-          {#if searchResults !== null}
-            <span>{showing} result(s) for "{searchQuery}"</span>
-          {:else}
-            <span>{showing} of {totalFiles} items</span>
-          {/if}
-          <span class="shortcuts">Shortcuts: Ctrl+A select all · Del delete · Esc clear · R refresh</span>
+          <span>
+            {#if searchResults !== null}
+              {sorted.length} result(s) for "{searchQuery}"
+            {:else}
+              {sorted.length} of {totalFiles} items
+            {/if}
+          </span>
+          <span class="shortcuts hide-mobile">Ctrl+A · Del · Esc · R</span>
         </div>
         <table>
           <thead>
             <tr>
-              <th class="check">
+              <th class="col-check">
                 <input
                   type="checkbox"
                   onchange={(e) => selected.set(e.target.checked ? new Set(sorted.map(f => f.path)) : new Set())}
                   checked={$selected.size === sorted.length && sorted.length > 0}
+                  aria-label="Select all"
                 />
               </th>
-              <th onclick={() => setSort('name')}>Name {sortKey==='name' ? (sortAsc?'↑':'↓') : ''}</th>
-              <th onclick={() => setSort('size')}>Size {sortKey==='size' ? (sortAsc?'↑':'↓') : ''}</th>
-              <th class="hide-mobile" onclick={() => setSort('mod_time')}>Modified {sortKey==='mod_time' ? (sortAsc?'↑':'↓') : ''}</th>
+              <th onclick={() => setSort('name')} class="sortable">
+                Name
+                {#if sortKey === 'name'}<Icon name={sortAsc ? 'sort_up' : 'sort_dn'} size={12} />{/if}
+              </th>
+              <th onclick={() => setSort('size')} class="sortable">
+                Size
+                {#if sortKey === 'size'}<Icon name={sortAsc ? 'sort_up' : 'sort_dn'} size={12} />{/if}
+              </th>
+              <th onclick={() => setSort('mod_time')} class="sortable hide-mobile">
+                Modified
+                {#if sortKey === 'mod_time'}<Icon name={sortAsc ? 'sort_up' : 'sort_dn'} size={12} />{/if}
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -279,65 +293,127 @@
         </table>
       {/if}
     </div>
-  </main>
+  </div>
 </div>
 
-<Preview file={previewFile} onClose={() => previewFile = null} />
+<Preview    file={previewFile} onClose={() => previewFile = null} />
 <ShareDialog file={shareFile} onClose={() => shareFile = null} />
-<Editor file={editorFile} onClose={() => editorFile = null} />
-{#if showSettings}<Settings onClose={() => showSettings = false} />{/if}
+<Editor     file={editorFile} onClose={() => editorFile = null} />
+{#if showSettings}   <Settings    onClose={() => showSettings = false} />{/if}
+{#if showThemePicker}<ThemePicker onClose={() => showThemePicker = false} />{/if}
 <Toast />
 
 <style>
-  .browser { min-height: 100vh; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
-  header {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 0.75rem 1.5rem; background: var(--surface);
-    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  .layout {
+    display: flex; min-height: 100vh;
+    background: var(--bg); color: var(--text);
   }
-  .brand { font-size: 1.3rem; font-weight: 700; flex-shrink: 0; }
-  .search-wrap { flex: 1; min-width: 200px; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 200px; flex-shrink: 0;
+    background: var(--header-bg); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .sidebar-brand {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 1rem 1rem 0.75rem;
+    font-size: 1rem; font-weight: 600; color: var(--text);
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand svg { color: var(--accent); }
+  .sidebar-nav { flex: 1; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.1rem; }
+  .nav-item {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.45rem 0.6rem; border-radius: 4px;
+    font-size: 0.875rem; color: var(--text2);
+    background: none; border: none; cursor: pointer; text-decoration: none;
+    text-align: left; width: 100%;
+  }
+  .nav-item:hover { background: var(--row-hover); color: var(--text); }
+  .nav-item.active { background: var(--row-hover); color: var(--accent); }
+  .sidebar-footer {
+    padding: 0.75rem; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .user-row { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 0; color: var(--text2); font-size: 0.8rem; }
+  .username { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn { background: none; border: none; color: var(--text2); cursor: pointer; padding: 0.3rem; border-radius: 3px; display: flex; }
+  .icon-btn:hover { background: var(--border); color: var(--text); }
+
+  /* Main */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 1rem 1.25rem; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+  }
+  .toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .search-wrap { position: relative; }
+  .search-icon { position: absolute; left: 0.5rem; top: 50%; transform: translateY(-50%); color: var(--text2); display: flex; pointer-events: none; }
   .search {
-    width: 100%; background: var(--bg); border: 1px solid var(--border);
-    color: var(--text); padding: 0.45rem 0.9rem; border-radius: 8px; font-size: 0.9rem;
+    background: var(--input-bg); border: 1px solid var(--border);
+    color: var(--text); padding: 0.4rem 0.75rem 0.4rem 1.75rem;
+    border-radius: 4px; font-size: 0.85rem; width: 200px;
   }
   .search:focus { outline: none; border-color: var(--accent); }
-  .user-info { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: var(--muted); flex-shrink: 0; }
-  .username { display: none; }
-  .theme-btn { background: none; border: 1px solid var(--border); padding: 0.3rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 1rem; }
-  .theme-btn:hover { background: var(--border); }
-  .user-info button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 0.3rem 0.75rem; border-radius: 6px; cursor: pointer; }
-  .user-info button:hover { background: var(--border); color: var(--text); }
-  .admin-link { color: var(--accent); text-decoration: none; font-size: 0.85rem; }
-  main { padding: 1.25rem 1.5rem; flex: 1; }
-  .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
-  .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.9rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
-  .btn:hover { background: var(--border); }
-  .btn.danger { border-color: #7f1d1d; color: var(--danger); }
+  .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .btn {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 0.35rem 0.7rem;
+    border-radius: 4px; cursor: pointer; font-size: 0.82rem;
+  }
+  .btn:hover { background: var(--row-hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+  .btn.danger { border-color: var(--danger); color: var(--danger); }
   .btn.danger:hover { background: var(--danger-bg); }
-  .new-folder { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-  .new-folder input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.9rem; flex: 1; min-width: 150px; }
-  .new-folder input:focus { outline: none; border-color: var(--accent); }
-  .new-folder button { background: var(--accent); border: none; color: #fff; padding: 0.4rem 0.9rem; border-radius: 6px; cursor: pointer; }
-  .new-folder button.cancel { background: var(--border); color: var(--text); }
-  .table-wrap { margin-top: 1rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .table-meta { padding: 0.5rem 0.75rem; font-size: 0.8rem; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
-  .shortcuts { display: none; }
+
+  /* New Folder Bar */
+  .new-folder-bar {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem; color: var(--text2);
+  }
+  .new-folder-bar input {
+    flex: 1; background: none; border: none; color: var(--text);
+    font-size: 0.875rem; outline: none;
+  }
+
+  /* Table */
+  .table-wrap { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .table-meta {
+    padding: 0.4rem 0.75rem; font-size: 0.78rem; color: var(--text2);
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+  }
+  .shortcuts { color: var(--text2); }
   table { width: 100%; border-collapse: collapse; }
   thead tr { background: var(--surface); }
-  th { padding: 0.6rem 0.75rem; text-align: left; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none; white-space: nowrap; }
-  th:hover { color: var(--text); }
-  th.check { width: 2rem; cursor: default; }
-  .empty { padding: 3rem; text-align: center; color: var(--muted); }
-
-  @media (min-width: 640px) {
-    .username { display: inline; }
-    .shortcuts { display: inline; }
+  th {
+    padding: 0.5rem 0.75rem; text-align: left;
+    font-size: 0.75rem; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap; user-select: none;
   }
+  th.sortable { cursor: pointer; display: flex; align-items: center; gap: 0.3rem; }
+  th.sortable:hover { color: var(--text); }
+  th.col-check { width: 2rem; }
+  .empty {
+    padding: 3rem; text-align: center; color: var(--text2);
+    display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+  }
+  .empty p { font-size: 0.875rem; }
+
   @media (max-width: 640px) {
+    .sidebar { display: none; }
     .hide-mobile { display: none; }
-    header { padding: 0.75rem 1rem; }
-    main { padding: 1rem; }
+    .main { padding: 0.75rem; }
+    .search { width: 140px; }
   }
 </style>

@@ -1,21 +1,24 @@
 <script>
   import { loadFiles } from '../stores/files.js'
+  import Icon from './Icon.svelte'
 
   export let path = ''
 
   $: parts = path ? path.split('/').filter(Boolean) : []
 
   function navigateTo(index) {
-    const target = parts.slice(0, index + 1).join('/')
-    loadFiles(target)
+    loadFiles(parts.slice(0, index + 1).join('/'))
   }
 </script>
 
-<nav class="breadcrumb">
-  <button onclick={() => loadFiles('')}>🏠 Home</button>
+<nav class="breadcrumb" aria-label="Path">
+  <button onclick={() => loadFiles('')} class="crumb home" title="Home">
+    <Icon name="home" size={14} />
+    <span>Home</span>
+  </button>
   {#each parts as part, i}
-    <span class="sep">/</span>
-    <button onclick={() => navigateTo(i)}>{part}</button>
+    <span class="sep"><Icon name="chevron_r" size={12} /></span>
+    <button class="crumb" onclick={() => navigateTo(i)}>{part}</button>
   {/each}
 </nav>
 
@@ -23,19 +26,23 @@
   .breadcrumb {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 0;
+    gap: 0.1rem;
     flex-wrap: wrap;
+    min-width: 0;
   }
-  button {
+  .crumb {
     background: none;
     border: none;
-    color: #a0aec0;
+    color: var(--text2);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     padding: 0.2rem 0.4rem;
-    border-radius: 4px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
   }
-  button:hover { background: #2a2d3a; color: #fff; }
-  .sep { color: #4a5568; }
+  .crumb:hover { background: var(--border); color: var(--text); }
+  .sep { color: var(--border); display: flex; align-items: center; }
 </style>

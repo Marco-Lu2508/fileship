@@ -1,0 +1,69 @@
+<script>
+  import { theme, THEMES } from '../stores/theme.js'
+  import Icon from './Icon.svelte'
+
+  export let onClose = () => {}
+</script>
+
+<div class="overlay" onclick={onClose} role="dialog" aria-modal="true" aria-label="Theme picker">
+  <div class="picker" onclick={(e) => e.stopPropagation()}>
+    <div class="picker-header">
+      <span>Theme</span>
+      <button onclick={onClose}><Icon name="x" size={14} /></button>
+    </div>
+    <div class="theme-list">
+      {#each THEMES as t}
+        <button
+          class="theme-item"
+          class:active={$theme === t.id}
+          onclick={() => { theme.set(t.id); onClose() }}
+          data-theme-preview={t.id}
+        >
+          <span class="swatch" data-theme={t.id}></span>
+          <span>{t.label}</span>
+          {#if $theme === t.id}
+            <span class="active-mark"><Icon name="check" size={12} /></span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </div>
+</div>
+
+<style>
+  .overlay {
+    position: fixed; inset: 0; z-index: 900;
+    display: flex; align-items: flex-start; justify-content: flex-end;
+    padding: 3rem 1rem 0;
+  }
+  .picker {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; width: 180px; box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .picker-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .picker-header button { background: none; border: none; color: var(--text2); cursor: pointer; display: flex; }
+  .theme-list { padding: 0.3rem; }
+  .theme-item {
+    display: flex; align-items: center; gap: 0.6rem;
+    width: 100%; background: none; border: none; color: var(--text);
+    padding: 0.45rem 0.5rem; border-radius: 3px; cursor: pointer; font-size: 0.875rem;
+    text-align: left;
+  }
+  .theme-item:hover { background: var(--row-hover); }
+  .theme-item.active { color: var(--accent); }
+  .active-mark { margin-left: auto; color: var(--accent); display: flex; }
+  .swatch {
+    width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0;
+  }
+  /* Swatch Farben */
+  .swatch[data-theme="dark"]      { background: #e94560; }
+  .swatch[data-theme="light"]     { background: #1565c0; }
+  .swatch[data-theme="nord"]      { background: #88c0d0; }
+  .swatch[data-theme="solarized"] { background: #268bd2; }
+  .swatch[data-theme="gruvbox"]   { background: #d79921; }
+</style>

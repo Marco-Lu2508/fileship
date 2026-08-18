@@ -1,41 +1,36 @@
 <script>
   import { toasts } from '../stores/toast.js'
+  import Icon from './Icon.svelte'
+
+  const iconMap = { success: 'check', error: 'warning', info: 'info' }
 </script>
 
-<div class="toast-container">
+<div class="toast-container" aria-live="polite">
   {#each $toasts as t (t.id)}
-    <div class="toast {t.type}">
-      {#if t.type === 'success'}✅{:else if t.type === 'error'}❌{:else}ℹ️{/if}
-      {t.message}
+    <div class="toast {t.type}" role="alert">
+      <span class="toast-icon"><Icon name={iconMap[t.type] || 'info'} size={14} /></span>
+      <span class="toast-msg">{t.message}</span>
     </div>
   {/each}
 </div>
 
 <style>
   .toast-container {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    z-index: 1000;
+    position: fixed; bottom: 1.25rem; right: 1.25rem;
+    display: flex; flex-direction: column; gap: 0.4rem; z-index: 1000;
   }
   .toast {
-    padding: 0.75rem 1.25rem;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    animation: slidein 0.2s ease;
-    max-width: 360px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    padding: 0.6rem 1rem; border-radius: 4px; font-size: 0.85rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    animation: slide-in 0.15s ease; max-width: 340px;
+    box-shadow: var(--shadow);
   }
-  .toast.success { background: #1a3a2a; border: 1px solid #2d6a4f; color: #6ee7b7; }
-  .toast.error   { background: #3a1a1a; border: 1px solid #7f1d1d; color: #fca5a5; }
-  .toast.info    { background: #1a1d3a; border: 1px solid #2d3a7f; color: #93c5fd; }
-  @keyframes slidein {
+  .toast.success { background: var(--surface); border: 1px solid var(--success); color: var(--success); }
+  .toast.error   { background: var(--surface); border: 1px solid var(--danger);  color: var(--danger); }
+  .toast.info    { background: var(--surface); border: 1px solid var(--border);  color: var(--text); }
+  .toast-icon { display: flex; flex-shrink: 0; }
+  .toast-msg { flex: 1; }
+  @keyframes slide-in {
     from { transform: translateX(100%); opacity: 0; }
     to   { transform: translateX(0);    opacity: 1; }
   }

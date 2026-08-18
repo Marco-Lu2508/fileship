@@ -3,9 +3,10 @@
   import { apiFetch } from '../stores/auth.js'
   import { success, error } from '../stores/toast.js'
   import { get } from 'svelte/store'
+  import Icon from './Icon.svelte'
 
   let dragging = false
-  let uploads = []  // { name, progress }
+  let uploads = []
 
   async function handleDrop(e) {
     e.preventDefault()
@@ -42,41 +43,32 @@
 
         xhr.onload = () => {
           uploads = uploads.filter(u => u !== entry)
-          if (xhr.status === 201) {
-            success(`Uploaded "${file.name}"`)
-          } else {
-            error(`Failed to upload "${file.name}"`)
-          }
+          xhr.status === 201 ? success(`Uploaded "${file.name}"`) : error(`Failed: "${file.name}"`)
           resolve()
         }
-
-        xhr.onerror = () => {
-          uploads = uploads.filter(u => u !== entry)
-          error(`Failed to upload "${file.name}"`)
-          resolve()
-        }
+        xhr.onerror = () => { uploads = uploads.filter(u => u !== entry); error(`Failed: "${file.name}"`); resolve() }
 
         xhr.open('POST', '/api/files/upload')
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
         xhr.send(form)
       })
     }
-
     await loadFiles(path)
   }
 </script>
 
 <div
   class="dropzone"
-  class:dragging
+  class:active={dragging}
   ondragover={(e) => { e.preventDefault(); dragging = true }}
   ondragleave={() => dragging = false}
   ondrop={handleDrop}
   role="region"
   aria-label="Upload area"
 >
-  <label>
-    📁 Drop files here or <span class="link">browse</span>
+  <label class="drop-label">
+    <Icon name="upload" size={16} />
+    <span>Drop files here or <span class="link">browse</span></span>
     <input type="file" multiple onchange={handleInput} hidden />
   </label>
 </div>
@@ -86,9 +78,7 @@
     {#each uploads as u}
       <div class="upload-item">
         <span class="upload-name">{u.name}</span>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: {u.progress}%"></div>
-        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:{u.progress}%"></div></div>
         <span class="upload-pct">{u.progress}%</span>
       </div>
     {/each}
@@ -97,17 +87,19 @@
 
 <style>
   .dropzone {
-    border: 2px dashed #2a2d3a; border-radius: 8px; padding: 1.25rem;
-    text-align: center; color: #718096; transition: all 0.2s; cursor: pointer;
+    border: 1px dashed var(--border); border-radius: 4px;
+    padding: 0.75rem 1rem; color: var(--text2);
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 0.75rem;
   }
-  .dropzone.dragging { border-color: #5865f2; background: #1e2035; color: #fff; }
-  .dropzone:hover { border-color: #4a5568; }
-  label { cursor: pointer; }
-  .link { color: #5865f2; text-decoration: underline; }
-  .upload-list { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
-  .upload-item { display: flex; align-items: center; gap: 0.75rem; background: #1a1d27; border-radius: 6px; padding: 0.5rem 0.75rem; }
-  .upload-name { font-size: 0.85rem; color: #a0aec0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .progress-bar { flex: 2; height: 6px; background: #2a2d3a; border-radius: 3px; overflow: hidden; }
-  .progress-fill { height: 100%; background: #5865f2; border-radius: 3px; transition: width 0.1s; }
-  .upload-pct { font-size: 0.8rem; color: #718096; width: 3rem; text-align: right; }
+  .dropzone.active { border-color: var(--accent); background: var(--row-hover); color: var(--text); }
+  .dropzone:hover { border-color: var(--text2); }
+  .drop-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; }
+  .link { color: var(--accent); text-decoration: underline; }
+  .upload-list { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+  .upload-item { display: flex; align-items: center; gap: 0.75rem; background: var(--surface); border-radius: 3px; padding: 0.4rem 0.75rem; border: 1px solid var(--border); }
+  .upload-name { font-size: 0.82rem; color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-bar { flex: 2; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.1s; }
+  .upload-pct { font-size: 0.78rem; color: var(--text2); width: 3rem; text-align: right; }
 </style>
