@@ -1,78 +1,116 @@
-# 🚀 Fileship
+# Fileship
 
-A fast, modern, self-hosted file browser — built from scratch.
+A fast, self-hosted file browser — spiritual successor to [filebrowser](https://github.com/filebrowser/filebrowser).
 
-> Spiritual successor to [filebrowser](https://github.com/filebrowser/filebrowser), rewritten with a clean architecture.
+**Stack**: Go · Svelte 5 · SQLite · JWT · WebSocket · Docker
 
-## Features
-
-- 📁 Browse, upload, download, rename, delete files
-- 🗜️ Download folders as ZIP
-- 👥 Multi-user with per-user root paths
-- 🔐 JWT authentication with auto-refreshing tokens
-- ⚡ Live updates via WebSocket
-- 🌙 Dark UI built with Svelte
-- 🐳 Single Docker image, no external dependencies
-- 💾 SQLite — no database server needed
+---
 
 ## Quick Start
 
-### Docker (recommended)
-
 ```bash
-cp .env.example .env
-# Edit .env — set JWT_SECRET and ADMIN_PASSWORD!
 docker compose up -d
 ```
 
-Open http://localhost:8080 — login with `admin` / your password.
+Open **http://localhost:8080** and login with `admin` / `admin`.
 
-### Local Development
+> **Change the password immediately** in the admin panel after first login!
 
-```bash
-# Backend
-make dev-backend
-
-# Frontend (separate terminal)
-make dev-frontend
-```
-
-### Build
-
-```bash
-make build
-./fileship
-```
+---
 
 ## Configuration
+
+Create a `.env` file to customize:
+
+```env
+ADMIN_PASSWORD=your-secure-password
+JWT_SECRET=your-random-secret-min-32-chars
+MAX_UPLOAD_MB=1024
+PORT=8080
+```
+
+Or set environment variables directly in `docker-compose.yml`.
+
+---
+
+## Features
+
+- Browse, upload, download, rename, delete files
+- Drag & drop upload with progress
+- Download folders as ZIP
+- Multi-user with per-user home directories and quotas
+- JWT authentication with auto-refresh
+- Live updates via WebSocket
+- 5 themes: Dark, Light, Nord, Solarized, Gruvbox
+- Text editor with syntax highlighting
+- Image/video/audio preview
+- Share links (public, no login required)
+- WebDAV support
+- Audit log
+- SQLite — no database server needed
+
+---
+
+## Docker Compose
+
+```yaml
+services:
+  fileship:
+    image: ghcr.io/Marco-Lu2508/fileship:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - fileship-data:/data
+      - fileship-db:/app
+    environment:
+      - ADMIN_PASSWORD=admin
+      - JWT_SECRET=change-me-in-production
+    restart: unless-stopped
+
+volumes:
+  fileship-data:
+  fileship-db:
+```
+
+Or clone the repo and build yourself:
+
+```bash
+git clone https://github.com/Marco-Lu2508/fileship.git
+cd fileship
+docker compose up -d
+```
+
+---
+
+## Configuration Reference
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | HTTP port |
-| `JWT_SECRET` | `change-me` | Secret for JWT signing |
-| `DB_PATH` | `./fileship.db` | SQLite database path |
-| `ROOT_PATH` | `./data` | Root directory for files |
-| `ADMIN_PASSWORD` | `admin` | Initial admin password |
+| `JWT_SECRET` | random | Secret for JWT signing (auto-generated if not set) |
+| `DB_PATH` | `/app/fileship.db` | SQLite database path |
+| `ROOT_PATH` | `/data` | Root directory for files |
+| `ADMIN_PASSWORD` | random | Initial admin password (printed to logs if not set) |
 | `MAX_UPLOAD_MB` | `1024` | Max upload size in MB |
+| `TLS_CERT` | — | Path to TLS certificate (enables HTTPS) |
+| `TLS_KEY` | — | Path to TLS private key |
 
-## API
+---
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/auth/login` | Login |
-| `POST` | `/api/auth/refresh` | Refresh tokens |
-| `POST` | `/api/auth/logout` | Logout |
-| `GET` | `/api/files?path=` | List files |
-| `POST` | `/api/files/upload` | Upload files |
-| `DELETE` | `/api/files?path=` | Delete file/folder |
-| `POST` | `/api/files/mkdir` | Create folder |
-| `POST` | `/api/files/rename` | Rename |
-| `GET` | `/api/files/download?path=` | Download file |
-| `GET` | `/api/files/zip?path=` | Download folder as ZIP |
-| `GET` | `/api/users` | List users (admin) |
-| `POST` | `/api/users` | Create user (admin) |
-| `DELETE` | `/api/users/{id}` | Delete user (admin) |
-| `GET` | `/ws` | WebSocket live updates |
+## Development
+
+```bash
+# Backend (Go)
+export PATH=$PATH:/usr/local/go/bin
+go run ./cmd/fileship
+
+# Frontend (Svelte)
+cd frontend
+npm install
+npm run dev
+```
+
+---
 
 ## License
 
