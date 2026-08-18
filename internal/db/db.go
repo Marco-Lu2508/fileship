@@ -39,7 +39,10 @@ func (d *DB) migrate() error {
 			expires_at DATETIME NOT NULL
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	return d.migrateQuotas()
 }
 
 func (d *DB) CreateAdminIfNotExists(username, password, rootPath string) error {

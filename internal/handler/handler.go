@@ -80,11 +80,8 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/ws", h.hub.Handle)
 	})
 
-	r.Handle("/webdav/*", http.HandlerFunc(h.WebDAV))
-
 	return r
 }
-
 // --- Auth ---
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +154,16 @@ func (h *Handler) userRoot(r *http.Request) string {
 	return h.resolveRoot(user.RootPath)
 }
 
+// claimsUser gibt Claims + Username zurück
+func (h *Handler) claimsUser(r *http.Request) (*auth.Claims, string) {
+	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	user, err := h.db.GetUserByID(claims.UserID)
+	if err != nil {
+		return claims, ""
+	}
+	return claims, user.Username
+}
+
 func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
@@ -201,6 +208,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	files := r.MultipartForm.File["files"]
+	claims, username := h.claimsUser(r)
 	for _, fh := range files {
 		if allowedTypes != "" && !fsvc.TypeAllowed(fh.Filename, allowedTypes) {
 			http.Error(w, "file type not allowed: "+fh.Filename, http.StatusForbidden)
@@ -212,7 +220,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		fsvc.SaveUpload(root, dir+"/"+fh.Filename, f)
 		f.Close()
-		h.db.LogAction(claims.UserID, "", "upload", dir+"/"+fh.Filename, r.RemoteAddr)
+		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+fh.Filename, r.RemoteAddr)
 	}
 	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: dir})
 	w.WriteHeader(http.StatusCreated)
@@ -292,7 +300,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 // --- Users (Admin) ---
 
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.db.ListUsers()
+	users, err := h.db.ListUsersWithQuota()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

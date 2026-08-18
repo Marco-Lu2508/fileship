@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strings"
 )
 
 // CSRF — Double Submit Cookie Pattern
@@ -28,6 +29,12 @@ func CSRF(next http.Handler) http.Handler {
 
 		// API Auth Endpoints sind JWT-geschützt, kein CSRF nötig
 		if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/refresh" || r.URL.Path == "/api/auth/logout" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// WebDAV hat eigene Auth, kein CSRF nötig
+		if strings.HasPrefix(r.URL.Path, "/webdav") {
 			next.ServeHTTP(w, r)
 			return
 		}

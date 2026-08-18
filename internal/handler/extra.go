@@ -65,8 +65,8 @@ func (h *Handler) moveFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-	h.db.LogAction(claims.UserID, "", "move", body.Src+"->"+body.Dst, r.RemoteAddr)
+	claims, username := h.claimsUser(r)
+	h.db.LogAction(claims.UserID, username, "move", body.Src+"->"+body.Dst, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "move", Path: body.Dst})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -87,8 +87,8 @@ func (h *Handler) copyFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-	h.db.LogAction(claims.UserID, "", "copy", body.Src+"->"+body.Dst, r.RemoteAddr)
+	claims, username := h.claimsUser(r)
+	h.db.LogAction(claims.UserID, username, "copy", body.Src+"->"+body.Dst, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "copy", Path: body.Dst})
 	w.WriteHeader(http.StatusCreated)
 }

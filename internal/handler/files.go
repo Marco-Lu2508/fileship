@@ -28,8 +28,8 @@ func (h *Handler) unzipFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-	h.db.LogAction(claims.UserID, "", "unzip", body.ZipPath+"->"+body.DestDir, r.RemoteAddr)
+	claims, username := h.claimsUser(r)
+	h.db.LogAction(claims.UserID, username, "unzip", body.ZipPath+"->"+body.DestDir, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "unzip", Path: body.DestDir})
 	w.WriteHeader(http.StatusCreated)
 }
@@ -60,8 +60,8 @@ func (h *Handler) writeText(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-	h.db.LogAction(claims.UserID, "", "edit", body.Path, r.RemoteAddr)
+	claims, username := h.claimsUser(r)
+	h.db.LogAction(claims.UserID, username, "edit", body.Path, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "edit", Path: body.Path})
 	w.WriteHeader(http.StatusNoContent)
 }
