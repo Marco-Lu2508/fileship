@@ -2,6 +2,7 @@
   import { loadFiles, currentPath } from '../stores/files.js'
   import { apiFetch } from '../stores/auth.js'
   import { csrfHeaders } from '../lib/csrf.js'
+  import { ensureCSRFToken } from '../lib/csrf.js'
   import { success, error } from '../stores/toast.js'
   import { get } from 'svelte/store'
   import Icon from './Icon.svelte'
@@ -25,6 +26,7 @@
 
   async function upload(fileList) {
     if (!fileList.length) return
+    await ensureCSRFToken()
     const path = get(currentPath)
     const token = localStorage.getItem('access_token')
 

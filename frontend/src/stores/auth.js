@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store'
-import { csrfHeaders } from '../lib/csrf.js'
+import { csrfHeaders, ensureCSRFToken } from '../lib/csrf.js'
 
 export const user = writable(null)
 export const accessToken = writable(localStorage.getItem('access_token') || '')
@@ -7,6 +7,7 @@ export const accessToken = writable(localStorage.getItem('access_token') || '')
 let refreshTimer = null
 
 export async function login(username, password) {
+  await ensureCSRFToken()
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
@@ -63,6 +64,7 @@ function clearTokens() {
 }
 
 export async function apiFetch(url, options = {}, retry = true) {
+  if (options.method && options.method !== 'GET' && options.method !== 'HEAD') await ensureCSRFToken()
   const token = get(accessToken)
   const res = await fetch(url, {
     ...options,
