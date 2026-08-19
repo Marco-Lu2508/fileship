@@ -90,7 +90,7 @@
 <div class="admin">
   <div class="admin-header">
     <span class="brand"><Icon name="folder" size={18} /> Fileship <span class="badge">Admin</span></span>
-    <a href="/" class="back">← Back to Files</a>
+    <a href="/" class="back"><Icon name="chevron_r" size={14} /> Back to Files</a>
   </div>
 
   <nav class="tabs">
@@ -106,11 +106,11 @@
       <div class="card">
         <h3>Add User</h3>
         <div class="form-row">
-          <input placeholder="Username" bind:value={form.username} />
+          <input placeholder="Username" minlength="2" bind:value={form.username} />
           <input type="password" placeholder="Password" bind:value={form.password} />
           <input placeholder="Root path" bind:value={form.root_path} />
           <label class="checkbox"><input type="checkbox" bind:checked={form.is_admin} /> Admin</label>
-          <button onclick={createUser}>Add</button>
+          <button onclick={createUser} disabled={!form.username.trim() || form.password.length < 8}>Add user</button>
         </div>
       </div>
 
@@ -133,12 +133,12 @@
               <tr>
                 <td>{u.username}</td>
                 <td class="mono">{u.root_path}</td>
-                <td>{u.is_admin ? '✅' : '—'}</td>
+                <td>{#if u.is_admin}<Icon name="check" size={14} />{:else}<span class="muted">No</span>{/if}</td>
                 <td>{u.quota_bytes > 0 ? formatBytes(u.quota_bytes) : '∞'}</td>
                 <td>{formatBytes(u.disk_usage)}</td>
                 <td>{new Date(u.created_at).toLocaleDateString()}</td>
                 <td class="row-actions">
-                  <button class="icon-btn" onclick={() => { editingQuota = editingQuota === u.id ? null : u.id; quotaForm[u.id] = { quota_mb: Math.round((u.quota_bytes||0)/1024/1024), allowed_types: u.allowed_types||'' } }} title="Quota">⚙️</button>
+                  <button class="icon-btn" onclick={() => { editingQuota = editingQuota === u.id ? null : u.id; quotaForm[u.id] = { quota_mb: Math.round((u.quota_bytes||0)/1024/1024), allowed_types: u.allowed_types||'' } }} title="Quota"><Icon name="settings" size={14} /></button>
                   <button class="icon-btn danger" onclick={() => deleteUser(u.id)} title="Delete"><Icon name="trash" size={14} /></button>
                 </td>
               </tr>
@@ -238,26 +238,26 @@
 
 <style>
   .admin { min-height: 100vh; background: var(--bg); color: var(--text); }
-  .admin-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; background: var(--surface); border-bottom: 1px solid var(--border); }
-  .brand { font-size: 1.2rem; font-weight: 700; }
-  .badge { background: var(--accent); color: #fff; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.5rem; vertical-align: middle; }
-  .back { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
-  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 2rem; background: var(--surface); }
-  .tabs button { background: none; border: none; color: var(--muted); padding: 0.75rem 1.25rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .admin-header { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem clamp(1rem, 4vw, 3rem); background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { display: inline-flex; align-items: center; gap: 0.55rem; font-size: 1.2rem; font-weight: 700; }
+  .badge { background: var(--row-hover); color: var(--accent); font-size: 0.7rem; padding: 0.25rem 0.55rem; border-radius: 999px; margin-left: 0.35rem; vertical-align: middle; }
+  .back { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); text-decoration: none; font-size: 0.85rem; }
+  .tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); padding: 0 clamp(1rem, 4vw, 3rem); background: var(--surface); }
+  .tabs button { display: inline-flex; align-items: center; gap: 0.45rem; background: none; border: none; color: var(--text2); padding: 0.85rem 1rem; cursor: pointer; font-size: 0.85rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
   .tabs button:hover { color: var(--text); }
-  .tab-content { padding: 1.5rem 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
+  .tab-content { width: min(100%, 1440px); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem); display: flex; flex-direction: column; gap: 1.25rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; box-shadow: var(--shadow); overflow-x: auto; }
   h3 { margin: 0 0 1rem; font-size: 0.95rem; color: var(--text); }
   .form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
   input:not([type="checkbox"]) { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
   input:focus { outline: none; border-color: var(--accent); }
-  .checkbox { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); }
+  .checkbox { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--text2); }
   button { background: var(--accent); border: none; color: #fff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   button:hover { background: var(--accent-h); }
   button.cancel { background: var(--border); color: var(--text); }
   table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-  th { text-align: left; padding: 0.5rem 0.75rem; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  th { text-align: left; padding: 0.65rem 0.75rem; font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
   td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--bg); }
   .row-actions { display: flex; gap: 0.25rem; }
   .icon-btn { background: none; border: none; cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 1rem; color: var(--text); }
@@ -265,22 +265,23 @@
   .icon-btn.danger:hover { background: var(--danger-bg); }
   .quota-row td { background: var(--bg); padding: 0; }
   .quota-form { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  .quota-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
+  .quota-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--text2); }
   .quota-form input { width: 100%; }
   .quota-actions { display: flex; gap: 0.5rem; }
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; text-align: center; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; text-align: center; box-shadow: var(--shadow); }
   .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
-  .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+  .stat-label { font-size: 0.8rem; color: var(--text2); margin-top: 0.25rem; }
   .user-usage { display: flex; align-items: center; gap: 1rem; padding: 0.4rem 0; }
   .user-name { width: 8rem; flex-shrink: 0; font-size: 0.9rem; }
   .usage-bar-wrap { flex: 1; }
   .usage-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
   .usage-fill { height: 100%; background: var(--accent); border-radius: 3px; }
-  .usage-text { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .usage-text { font-size: 0.8rem; color: var(--text2); white-space: nowrap; }
   .action-badge { background: var(--bg); border: 1px solid var(--border); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-family: monospace; }
   .path-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mono { font-family: monospace; }
   .small { font-size: 0.8rem; }
-  .muted { color: var(--muted); font-size: 0.9rem; }
+  .muted { color: var(--text2); font-size: 0.9rem; }
+  @media (max-width: 700px) { .admin-header { align-items: flex-start; gap: 0.75rem; flex-direction: column; } .tabs { overflow-x: auto; } .form-row { align-items: stretch; flex-direction: column; } .form-row input, .form-row button { width: 100%; } .user-usage { align-items: flex-start; flex-direction: column; gap: 0.35rem; } .user-name { width: auto; } .usage-bar-wrap { width: 100%; } }
 </style>

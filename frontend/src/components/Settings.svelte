@@ -47,13 +47,17 @@
   $: usedPct = settings?.quota_bytes > 0
     ? Math.min(100, Math.round((settings.disk_usage / settings.quota_bytes) * 100))
     : null
+
+  function handleKey(e) { if (e.key === 'Escape') onClose() }
 </script>
 
-<div class="overlay" role="dialog" aria-modal="true">
+<svelte:window onkeydown={handleKey} />
+
+<div class="overlay" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onClose() }} onkeydown={handleKey}>
   <div class="settings-modal">
     <div class="settings-header">
       <span><Icon name="settings" size={15} /> Settings</span>
-      <button class="close" onclick={onClose}>✕</button>
+      <button class="close" onclick={onClose} title="Close"><Icon name="x" size={15} /></button>
     </div>
 
     <div class="settings-body">
@@ -83,7 +87,7 @@
             </div>
           {/if}
         {:else}
-          <p class="muted">Loading…</p>
+          <div class="loading-row"><span class="spinner"></span><p class="muted">Loading storage details...</p></div>
         {/if}
       </section>
 
@@ -125,23 +129,25 @@
 </div>
 
 <style>
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 800; padding: 1rem; }
-  .settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+  .overlay { position: fixed; inset: 0; background: rgba(8, 15, 25, 0.72); display: flex; align-items: center; justify-content: center; z-index: 800; padding: 1rem; }
+  .settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 560px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow); }
   .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); font-size: 1rem; font-weight: 600; color: var(--text); }
-  .close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
-  .settings-body { overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1.5rem; }
-  section { display: flex; flex-direction: column; gap: 0.6rem; }
+  .settings-header > span, h3 { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .close { display: flex; background: none; border: none; color: var(--text2); cursor: pointer; padding: 0.35rem; border-radius: 5px; }
+  .close:hover { color: var(--text); background: var(--row-hover); }
+  .settings-body { overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+  section { display: flex; flex-direction: column; gap: 0.6rem; padding: 1rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface2); }
   h3 { font-size: 0.9rem; font-weight: 600; color: var(--text); margin: 0; }
-  .info-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--muted); }
+  .info-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text2); }
   .info-row span:last-child { color: var(--text); }
   .quota-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
   .quota-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
   .quota-fill.warn { background: #f59e0b; }
   .quota-fill.crit { background: var(--danger); }
-  .quota-pct { font-size: 0.8rem; color: var(--muted); }
+  .quota-pct { font-size: 0.8rem; color: var(--text2); }
   .webdav-url { display: flex; align-items: center; gap: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; }
   code { flex: 1; font-size: 0.85rem; color: var(--accent); font-family: monospace; word-break: break-all; }
-  .webdav-url button { background: none; border: none; cursor: pointer; font-size: 1rem; flex-shrink: 0; }
+  .webdav-url button { display: flex; background: none; border: none; color: var(--text2); cursor: pointer; flex-shrink: 0; }
   select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
   .form { display: flex; flex-direction: column; gap: 0.6rem; }
   input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
@@ -149,7 +155,10 @@
   button { background: var(--accent); border: none; color: #fff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   button:hover:not(:disabled) { background: var(--accent-h); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .muted { font-size: 0.85rem; color: var(--muted); }
+  .muted { font-size: 0.85rem; color: var(--text2); }
   .small { font-size: 0.8rem; }
   .mono { font-family: monospace; font-size: 0.85rem; }
+  .loading-row { display: flex; align-items: center; gap: 0.6rem; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
