@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/yourname/fileship/internal/model"
@@ -73,15 +74,9 @@ func ListPaged(root string, opts model.ListOptions) (model.ListResult, error) {
 }
 
 func sortFiles(files []model.FileInfo, by string, asc bool) {
-	// insertion sort — stable, gut für kleine Listen
-	for i := 1; i < len(files); i++ {
-		for j := i; j > 0; j-- {
-			if less(files[j-1], files[j], by, asc) {
-				break
-			}
-			files[j-1], files[j] = files[j], files[j-1]
-		}
-	}
+	sort.SliceStable(files, func(i, j int) bool {
+		return less(files[i], files[j], by, asc)
+	})
 }
 
 func less(a, b model.FileInfo, by string, asc bool) bool {

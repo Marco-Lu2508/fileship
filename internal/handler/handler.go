@@ -53,6 +53,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/api/files/rename", h.renameFile)
 		r.Post("/api/files/copy", h.copyFile)
 		r.Get("/api/files/download", h.downloadFile)
+		r.Get("/api/files/preview", h.previewFile)
 		r.Post("/api/files/zip-multi", h.zipMulti)
 		r.Get("/api/files/zip", h.zipDir)
 		r.Post("/api/files/move", h.moveFile)
@@ -302,6 +303,20 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	mime, _ := fsvc.DetectMime(root, rel)
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "attachment")
+	http.ServeFile(w, r, abs)
+}
+
+func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	root := h.userRoot(r)
+	abs, err := fsvc.Resolve(root, rel)
+	if err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	mime, _ := fsvc.DetectMime(root, rel)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline")
 	http.ServeFile(w, r, abs)
 }
 

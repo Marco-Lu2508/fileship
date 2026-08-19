@@ -16,11 +16,17 @@ func Auth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
-			if !strings.HasPrefix(header, "Bearer ") {
+			token := ""
+			if strings.HasPrefix(header, "Bearer ") {
+				token = strings.TrimPrefix(header, "Bearer ")
+			} else if r.Method == http.MethodGet {
+				token = r.URL.Query().Get("access_token")
+			}
+			if token == "" {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			claims, err := auth.ParseAccessToken(secret, strings.TrimPrefix(header, "Bearer "))
+			claims, err := auth.ParseAccessToken(secret, token)
 			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return

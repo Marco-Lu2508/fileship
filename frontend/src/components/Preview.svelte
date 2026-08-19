@@ -18,6 +18,7 @@
   $: isText  = mime.startsWith('text/')
 
   let textContent = ''
+  $: previewUrl = file ? `/api/files/preview?path=${encodeURIComponent(file.path)}&access_token=${encodeURIComponent(localStorage.getItem('access_token') || '')}` : ''
   $: if (file) loadPreview(file)
 
   async function loadPreview(currentFile) {
@@ -27,13 +28,22 @@
     if (url) URL.revokeObjectURL(url)
     url = ''
     textContent = ''
+    if (!isText) {
+      url = previewUrl
+      loading = false
+      return
+    }
     try {
       const res = await apiFetch(`/api/files/download?path=${encodeURIComponent(currentFile.path)}`)
       if (!res.ok) throw new Error('preview failed')
       const blob = await res.blob()
       if (request !== previewRequest) return
-      url = URL.createObjectURL(blob)
-      if (isText) textContent = await blob.text()
+      if (isText) {
+        textContent = await blob.text()
+        url = URL.createObjectURL(blob)
+      } else {
+        url = previewUrl
+      }
       loading = false
     } catch {
       if (request === previewRequest) {
@@ -69,13 +79,13 @@
         {:else if loadError}
           <div class="preview-state"><Icon name="warning" size={32} /><p>Preview could not be loaded.</p></div>
         {:else if isImage}
-          <img src={url} alt={file.name} />
+          <img src={url} alt={file.name} onload={() => loading = false} onerror={() => loadError = true} />
         {:else if isVideo}
-          <video controls src={url}><track kind="captions" /></video>
+          <video controls src={previewUrl} oncanplay={() => loading = false} onerror={() => loadError = true}><track kind="captions" /></video>
         {:else if isAudio}
-          <audio controls src={url}></audio>
+          <audio controls src={previewUrl} oncanplay={() => loading = false} onerror={() => loadError = true}></audio>
         {:else if isPdf}
-          <iframe src={url} title={file.name}></iframe>
+          <iframe src={previewUrl} title={file.name} onload={() => loading = false}></iframe>
         {:else if isText}
           <pre>{textContent}</pre>
         {:else}
