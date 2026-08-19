@@ -5,8 +5,8 @@
   export let onClose = () => {}
 </script>
 
-<div class="overlay" onclick={onClose} role="dialog" aria-modal="true" aria-label="Theme picker">
-  <div class="picker" onclick={(e) => e.stopPropagation()}>
+<div class="overlay" role="dialog" aria-modal="true" aria-label="Theme picker" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onClose() }} onkeydown={(e) => { if (e.key === 'Escape') onClose() }}>
+  <div class="picker">
     <div class="picker-header">
       <span>Theme</span>
       <button onclick={onClose}><Icon name="x" size={14} /></button>

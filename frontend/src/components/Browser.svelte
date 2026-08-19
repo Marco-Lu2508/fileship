@@ -212,7 +212,6 @@
           placeholder="Folder name"
           bind:value={newFolderName}
           onkeydown={(e) => { if (e.key === 'Enter') handleMkdir(); if (e.key === 'Escape') showNewFolder = false }}
-          autofocus
         />
         <button class="btn primary" onclick={handleMkdir}>Create</button>
         <button class="btn" onclick={() => showNewFolder = false}>Cancel</button>
@@ -322,7 +321,6 @@
     font-size: 1rem; font-weight: 600; color: var(--text);
     border-bottom: 1px solid var(--border);
   }
-  .sidebar-brand svg { color: var(--accent); }
   .sidebar-nav { flex: 1; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.1rem; }
   .nav-item {
     display: flex; align-items: center; gap: 0.6rem;

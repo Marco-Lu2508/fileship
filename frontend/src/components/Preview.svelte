@@ -24,8 +24,8 @@
 <svelte:window onkeydown={handleKey} />
 
 {#if file}
-  <div class="overlay" onclick={onClose} role="dialog" aria-modal="true" aria-label="Preview">
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="dialog" aria-modal="true" aria-label="Preview" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onClose() }} onkeydown={handleKey}>
+    <div class="modal">
       <div class="modal-header">
         <span class="filename">{file.name}</span>
         <div class="modal-actions">

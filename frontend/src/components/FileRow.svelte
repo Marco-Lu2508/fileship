@@ -96,7 +96,6 @@
         bind:value={newName}
         onkeydown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') { renaming = false; newName = file.name } }}
         onblur={handleRename}
-        autofocus
       />
     {:else}
       <span class="file-icon" class:is-dir={file.is_dir}>
