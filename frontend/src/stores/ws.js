@@ -8,11 +8,9 @@ export function connectWS() {
   if (socket) return
   const token = get(accessToken)
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  socket = new WebSocket(`${proto}://${location.host}/ws`, )
+  socket = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`)
 
-  socket.onopen = () => {
-    socket.send(JSON.stringify({ token }))
-  }
+  socket.onopen = () => {}
 
   socket.onmessage = (e) => {
     const event = JSON.parse(e.data)

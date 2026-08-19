@@ -8,10 +8,10 @@ services:
       - fileship-db:/app
     environment:
       - PORT=8080
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:-}
       - ROOT_PATH=/data
       - DB_PATH=/app/fileship.db
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-1024}
     restart: unless-stopped
 

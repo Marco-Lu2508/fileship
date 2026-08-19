@@ -9,6 +9,10 @@ import (
 //go:embed dist
 var distFS embed.FS
 
+func LocaleFile(lang string) ([]byte, error) {
+	return fs.ReadFile(distFS, "dist/locales/"+lang+".json")
+}
+
 func FileServer() http.Handler {
 	dist, err := fs.Sub(distFS, "dist")
 	if err != nil {

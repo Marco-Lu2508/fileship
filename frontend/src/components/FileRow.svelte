@@ -1,5 +1,5 @@
 <script>
-  import { deleteFile, renameFile, loadFiles, currentPath, selected, downloadUrl, zipUrl } from '../stores/files.js'
+  import { deleteFile, renameFile, loadFiles, currentPath, selected, downloadFile } from '../stores/files.js'
   import { success, error } from '../stores/toast.js'
   import { get } from 'svelte/store'
   import Icon from './Icon.svelte'
@@ -114,10 +114,10 @@
 
   <td class="col-actions">
     {#if file.is_dir}
-      <a class="action-btn" href={zipUrl(file.path)} title="Download as ZIP"><Icon name="download" size={14} /></a>
+      <button class="action-btn" onclick={() => downloadFile(file.path, true)} title="Download as ZIP"><Icon name="download" size={14} /></button>
     {:else}
       <button class="action-btn" onclick={() => onPreview(file)} title="Preview"><Icon name="eye" size={14} /></button>
-      <a class="action-btn" href={downloadUrl(file.path)} title="Download"><Icon name="download" size={14} /></a>
+      <button class="action-btn" onclick={() => downloadFile(file.path)} title="Download"><Icon name="download" size={14} /></button>
       {#if isText}
         <button class="action-btn" onclick={() => onEdit(file)} title="Edit"><Icon name="edit" size={14} /></button>
       {/if}

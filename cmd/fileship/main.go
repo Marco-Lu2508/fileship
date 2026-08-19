@@ -39,7 +39,7 @@ func main() {
 		log.Fatal("admin setup:", err)
 	}
 
-	hub := ws.NewHub(cfg.Port)
+		hub := ws.NewHub(cfg.JWTSecret)
 	h := handler.New(cfg, database, hub)
 
 	staticFS := static.FileServer()

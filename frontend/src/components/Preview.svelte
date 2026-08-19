@@ -1,11 +1,13 @@
 <script>
-  import { downloadUrl } from '../stores/files.js'
+  import { apiFetch } from '../stores/auth.js'
   import Icon from './Icon.svelte'
+  import { onDestroy } from 'svelte'
 
   export let file = null
   export let onClose = () => {}
 
-  $: url = file ? downloadUrl(file.path) : ''
+  let url = ''
+  let previewRequest = 0
   $: mime = file?.mime_type || ''
   $: isImage = mime.startsWith('image/')
   $: isVideo = mime.startsWith('video/')
@@ -14,9 +16,26 @@
   $: isText  = mime.startsWith('text/')
 
   let textContent = ''
-  $: if (isText && file) {
-    fetch(url).then(r => r.text()).then(t => textContent = t).catch(() => textContent = 'Could not load file.')
+  $: if (file) loadPreview(file)
+
+  async function loadPreview(currentFile) {
+    const request = ++previewRequest
+    if (url) URL.revokeObjectURL(url)
+    url = ''
+    textContent = ''
+    try {
+      const res = await apiFetch(`/api/files/download?path=${encodeURIComponent(currentFile.path)}`)
+      if (!res.ok) throw new Error('preview failed')
+      const blob = await res.blob()
+      if (request !== previewRequest) return
+      if (isText) textContent = await blob.text()
+      else url = URL.createObjectURL(blob)
+    } catch {
+      if (request === previewRequest && isText) textContent = 'Could not load file.'
+    }
   }
+
+  onDestroy(() => { if (url) URL.revokeObjectURL(url) })
 
   function handleKey(e) { if (e.key === 'Escape') onClose() }
 </script>

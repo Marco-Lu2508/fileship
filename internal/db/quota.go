@@ -1,14 +1,24 @@
 package db
 
-import "github.com/yourname/fileship/internal/model"
+import (
+	"strings"
+
+	"github.com/yourname/fileship/internal/model"
+)
+
+func isDuplicateColumnError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
+}
 
 func (d *DB) migrateQuotas() error {
-	_, err := d.Exec(`
-		ALTER TABLE users ADD COLUMN quota_bytes INTEGER NOT NULL DEFAULT 0;
-		ALTER TABLE users ADD COLUMN allowed_types TEXT NOT NULL DEFAULT '';
-	`)
-	// Fehler ignorieren falls Spalten schon existieren
-	_ = err
+	for _, statement := range []string{
+		"ALTER TABLE users ADD COLUMN quota_bytes INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE users ADD COLUMN allowed_types TEXT NOT NULL DEFAULT ''",
+	} {
+		if _, err := d.Exec(statement); err != nil && !isDuplicateColumnError(err) {
+			return err
+		}
+	}
 	return nil
 }
 

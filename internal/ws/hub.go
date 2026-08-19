@@ -3,9 +3,10 @@ package ws
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
+	"net/url"
 	"sync"
 
+	"github.com/yourname/fileship/internal/auth"
 	"github.com/gorilla/websocket"
 	"github.com/yourname/fileship/internal/model"
 )
@@ -13,13 +14,13 @@ import (
 type Hub struct {
 	mu      sync.RWMutex
 	clients map[*websocket.Conn]struct{}
-	allowedHost string
+	secret  string
 }
 
-func NewHub(allowedHost string) *Hub {
+func NewHub(secret string) *Hub {
 	return &Hub{
 		clients:     make(map[*websocket.Conn]struct{}),
-		allowedHost: allowedHost,
+		secret:      secret,
 	}
 }
 
@@ -30,14 +31,17 @@ func (h *Hub) upgrader() websocket.Upgrader {
 			if origin == "" {
 				return true // native clients
 			}
-			// Origin muss mit dem Host übereinstimmen
-			return r.Host == r.Header.Get("Host") ||
-				strings.Contains(origin, r.Host)
+			parsed, err := url.Parse(origin)
+			return err == nil && parsed.Host == r.Host
 		},
 	}
 }
 
 func (h *Hub) Handle(w http.ResponseWriter, r *http.Request) {
+	if _, err := auth.ParseAccessToken(h.secret, r.URL.Query().Get("token")); err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	up := h.upgrader()
 	conn, err := up.Upgrade(w, r, nil)
 	if err != nil {

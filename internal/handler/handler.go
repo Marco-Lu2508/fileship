@@ -41,6 +41,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/api/auth/refresh", h.refresh)
 	r.Post("/api/auth/logout", h.logout)
 	r.Get("/s/{token}", h.PublicShare)
+	r.Get("/ws", h.hub.Handle)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(h.cfg.JWTSecret))
@@ -81,7 +82,6 @@ func (h *Handler) Routes() http.Handler {
 			r.Get("/api/stats", h.stats)
 		})
 
-		r.Get("/ws", h.hub.Handle)
 	})
 
 	return r
@@ -209,22 +209,26 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	dir := r.FormValue("path")
 	root := h.userRoot(r)
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-
-	// Quota + Typ-Check
-	quota, allowedTypes, _ := h.db.GetUserQuotaAndTypes(claims.UserID)
-	if quota > 0 {
-		usage, _ := fsvc.DirSize(root)
-		if usage >= quota {
-			http.Error(w, "storage quota exceeded", http.StatusForbidden)
-			return
-		}
-	}
-
 	files := r.MultipartForm.File["files"]
 	if len(files) > 100 {
 		http.Error(w, "too many files (max 100)", http.StatusBadRequest)
 		return
 	}
+
+	// Quota + Typ-Check
+	quota, allowedTypes, _ := h.db.GetUserQuotaAndTypes(claims.UserID)
+	if quota > 0 {
+		usage, _ := fsvc.DirSize(root)
+		incoming := int64(0)
+		for _, fh := range files {
+			incoming += fh.Size
+		}
+		if usage > quota || incoming > quota-usage {
+			http.Error(w, "storage quota exceeded", http.StatusForbidden)
+			return
+		}
+	}
+
 	claims, username := h.claimsUser(r)
 	for _, fh := range files {
 		// filepath.Base entfernt alle Pfad-Komponenten — verhindert Path Traversal
@@ -240,7 +244,11 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		fsvc.SaveUpload(root, dir+"/"+safeName, f)
+		if err := fsvc.SaveUpload(root, dir+"/"+safeName, f); err != nil {
+			f.Close()
+			http.Error(w, "could not save file", http.StatusInternalServerError)
+			return
+		}
 		f.Close()
 		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+safeName, r.RemoteAddr)
 	}

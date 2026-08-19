@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/yourname/fileship/internal/static"
 
 	fsvc "github.com/yourname/fileship/internal/fs"
 	"github.com/yourname/fileship/internal/model"
@@ -133,12 +134,16 @@ func (h *Handler) i18n(w http.ResponseWriter, r *http.Request) {
 	if !validLang.MatchString(lang) {
 		lang = "en"
 	}
-	langFile := filepath.Join("./frontend/dist/locales", lang+".json")
-	if _, err := os.Stat(langFile); err != nil {
-		langFile = "./frontend/dist/locales/en.json"
+	content, err := static.LocaleFile(lang)
+	if err != nil {
+		content, err = static.LocaleFile("en")
+	}
+	if err != nil {
+		http.Error(w, "translation unavailable", http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	http.ServeFile(w, r, langFile)
+	_, _ = w.Write(content)
 }
 
 // thumbDir helper — sauber aus DBPath ableiten

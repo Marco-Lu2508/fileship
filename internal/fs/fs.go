@@ -17,9 +17,26 @@ var ErrForbidden = errors.New("path outside root")
 
 // Resolve gibt den absoluten, sicheren Pfad zurück oder ErrForbidden
 func Resolve(root, rel string) (string, error) {
-	abs := filepath.Clean(filepath.Join(root, rel))
-	if !strings.HasPrefix(abs, filepath.Clean(root)+string(os.PathSeparator)) && abs != filepath.Clean(root) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
 		return "", ErrForbidden
+	}
+	rootAbs, err = filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", ErrForbidden
+	}
+	abs := filepath.Clean(filepath.Join(rootAbs, rel))
+	if !strings.HasPrefix(abs, rootAbs+string(os.PathSeparator)) && abs != rootAbs {
+		return "", ErrForbidden
+	}
+	for current := abs; current != rootAbs; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", ErrForbidden
+		}
 	}
 	return abs, nil
 }

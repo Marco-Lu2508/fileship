@@ -42,12 +42,15 @@ export async function uploadFiles(path, fileList) {
   await apiFetch('/api/files/upload', { method: 'POST', body: form })
 }
 
-export function downloadUrl(path) {
-  const token = localStorage.getItem('access_token')
-  return `/api/files/download?path=${encodeURIComponent(path)}&token=${token}`
-}
-
-export function zipUrl(path) {
-  const token = localStorage.getItem('access_token')
-  return `/api/files/zip?path=${encodeURIComponent(path)}&token=${token}`
+export async function downloadFile(path, archive = false) {
+  const endpoint = archive ? '/api/files/zip' : '/api/files/download'
+  const res = await apiFetch(`${endpoint}?path=${encodeURIComponent(path)}`)
+  if (!res.ok) throw new Error('Download failed')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = path.split('/').pop() + (archive ? '.zip' : '')
+  link.click()
+  URL.revokeObjectURL(url)
 }

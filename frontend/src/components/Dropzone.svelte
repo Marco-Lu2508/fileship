@@ -1,6 +1,7 @@
 <script>
   import { loadFiles, currentPath } from '../stores/files.js'
   import { apiFetch } from '../stores/auth.js'
+  import { csrfHeaders } from '../lib/csrf.js'
   import { success, error } from '../stores/toast.js'
   import { get } from 'svelte/store'
   import Icon from './Icon.svelte'
@@ -50,6 +51,7 @@
 
         xhr.open('POST', '/api/files/upload')
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+        xhr.setRequestHeader('X-CSRF-Token', csrfHeaders()['X-CSRF-Token'])
         xhr.send(form)
       })
     }
