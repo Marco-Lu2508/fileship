@@ -12,7 +12,7 @@ RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
 COPY . .
 # Copy built frontend AFTER COPY . . so it's available for go:embed
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/frontend/dist ./internal/static/dist
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship ./cmd/fileship
 
 # Stage 3: Final minimal image

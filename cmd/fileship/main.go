@@ -2,9 +2,7 @@ package main
 
 import (
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -13,11 +11,9 @@ import (
 	"github.com/yourname/fileship/internal/db"
 	"github.com/yourname/fileship/internal/handler"
 	"github.com/yourname/fileship/internal/middleware"
+	"github.com/yourname/fileship/internal/static"
 	"github.com/yourname/fileship/internal/ws"
 )
-
-//go:embed frontend/dist
-var frontendFS embed.FS
 
 func main() {
 	cfg := config.Load()
@@ -46,11 +42,7 @@ func main() {
 	hub := ws.NewHub(cfg.Port)
 	h := handler.New(cfg, database, hub)
 
-	dist, err := fs.Sub(frontendFS, "frontend/dist")
-	if err != nil {
-		log.Fatal("embed:", err)
-	}
-	staticFS := http.FileServer(http.FS(dist))
+	staticFS := static.FileServer()
 	mux := http.NewServeMux()
 	routes := h.Routes()
 	mux.Handle("/api/", routes)
