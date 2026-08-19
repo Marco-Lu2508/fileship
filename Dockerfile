@@ -19,7 +19,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship .
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
-COPY --from=backend-builder /app/fileship .
+COPY --from=backend-builder /app/fileship /usr/local/bin/fileship
 RUN mkdir -p /data
 
 EXPOSE 8080
@@ -28,4 +28,4 @@ ENV DB_PATH=/app/fileship.db
 
 VOLUME ["/data"]
 
-CMD ["./fileship"]
+CMD ["/usr/local/bin/fileship"]
