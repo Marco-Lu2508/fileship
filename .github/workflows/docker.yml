@@ -24,10 +24,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fileship:latest
-            ghcr.io/${{ github.repository_owner }}/fileship:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner | lower }}/fileship:latest
+            ghcr.io/${{ github.repository_owner | lower }}/fileship:${{ github.sha }}
