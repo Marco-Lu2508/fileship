@@ -30,7 +30,6 @@ JWT_SECRET=generate-a-long-random-secret
 Stop or update it with:
 
 ```bash
-docker compose pull
 docker compose up -d --force-recreate
 ```
 
