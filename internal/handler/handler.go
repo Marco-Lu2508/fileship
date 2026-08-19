@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"golang.org/x/crypto/bcrypt"
@@ -50,6 +49,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/api/files/upload", h.uploadFile)
 		r.Delete("/api/files", h.deleteFile)
 		r.Post("/api/files/mkdir", h.mkdir)
+		r.Post("/api/files/touch", h.touch)
 		r.Post("/api/files/rename", h.renameFile)
 		r.Post("/api/files/copy", h.copyFile)
 		r.Get("/api/files/download", h.downloadFile)
@@ -232,9 +232,8 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	claims, username := h.claimsUser(r)
 	for _, fh := range files {
-		// filepath.Base entfernt alle Pfad-Komponenten — verhindert Path Traversal
-		safeName := filepath.Base(fh.Filename)
-		if safeName == "." || safeName == "" {
+		safeName, err := fsvc.CleanRelativePath(fh.Filename)
+		if err != nil {
 			continue
 		}
 		if allowedTypes != "" && !fsvc.TypeAllowed(safeName, allowedTypes) {
@@ -265,6 +264,20 @@ func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	h.hub.Broadcast(model.WSEvent{Type: "delete", Path: path})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) touch(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Path string `json:"path"` }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if err := fsvc.CreateFile(h.userRoot(r), body.Path); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.hub.Broadcast(model.WSEvent{Type: "create", Path: body.Path})
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *Handler) mkdir(w http.ResponseWriter, r *http.Request) {

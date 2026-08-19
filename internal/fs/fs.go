@@ -15,6 +15,17 @@ import (
 
 var ErrForbidden = errors.New("path outside root")
 
+func CleanRelativePath(path string) (string, error) {
+	if path == "" || filepath.IsAbs(path) {
+		return "", ErrForbidden
+	}
+	clean := filepath.ToSlash(filepath.Clean(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", ErrForbidden
+	}
+	return clean, nil
+}
+
 // Resolve gibt den absoluten, sicheren Pfad zurück oder ErrForbidden
 func Resolve(root, rel string) (string, error) {
 	rootAbs, err := filepath.Abs(root)
@@ -77,6 +88,21 @@ func Mkdir(root, rel string) error {
 		return err
 	}
 	return os.MkdirAll(abs, 0755)
+}
+
+func CreateFile(root, rel string) error {
+	abs, err := Resolve(root, rel)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return err
+	}
+	return file.Close()
 }
 
 func Delete(root, rel string) error {

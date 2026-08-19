@@ -8,6 +8,7 @@
 
   let dragging = false
   let uploads = []
+  let folderInput
 
   async function handleDrop(e) {
     e.preventDefault()
@@ -19,6 +20,8 @@
     await upload(e.target.files)
     e.target.value = ''
   }
+
+  function openFolderPicker() { folderInput?.click() }
 
   async function upload(fileList) {
     if (!fileList.length) return
@@ -33,7 +36,7 @@
         const xhr = new XMLHttpRequest()
         const form = new FormData()
         form.append('path', path)
-        form.append('files', file)
+        form.append('files', file, file.webkitRelativePath || file.name)
 
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
@@ -72,6 +75,8 @@
     <Icon name="upload" size={16} />
     <span>Drop files here or <span class="link">browse</span></span>
     <input type="file" multiple onchange={handleInput} hidden />
+    <button type="button" class="folder-button" onclick={openFolderPicker} title="Upload folder"><Icon name="folder" size={14} /></button>
+    <input bind:this={folderInput} type="file" webkitdirectory directory multiple onchange={handleInput} hidden />
   </label>
 </div>
 
@@ -98,6 +103,8 @@
   .dropzone:hover { border-color: var(--text2); }
   .drop-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; }
   .link { color: var(--accent); text-decoration: underline; }
+  .folder-button { margin-left: auto; display: flex; align-items: center; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 4px; padding: 0.35rem; cursor: pointer; }
+  .folder-button:hover { color: var(--accent); border-color: var(--accent); }
   .upload-list { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
   .upload-item { display: flex; align-items: center; gap: 0.75rem; background: var(--surface); border-radius: 3px; padding: 0.4rem 0.75rem; border: 1px solid var(--border); }
   .upload-name { font-size: 0.82rem; color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

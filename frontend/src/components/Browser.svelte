@@ -19,6 +19,8 @@
 
   let showNewFolder  = false
   let newFolderName  = ''
+  let showNewFile    = false
+  let newFileName    = ''
   let sortKey        = 'name'
   let sortAsc        = true
   let searchQuery    = ''
@@ -46,7 +48,7 @@
       if (e.key === 'a') { e.preventDefault(); selected.set(new Set(displayFiles.map(f => f.path))) }
     }
     if (e.key === 'Delete' && get(selected).size > 0) deleteSelected()
-    if (e.key === 'Escape') { selected.set(new Set()); searchQuery = ''; searchResults = null; showNewFolder = false }
+    if (e.key === 'Escape') { selected.set(new Set()); searchQuery = ''; searchResults = null; showNewFolder = false; showNewFile = false }
     if (e.key === 'r' && !e.ctrlKey && !e.metaKey) loadFiles(get(currentPath))
   }
 
@@ -60,6 +62,22 @@
     } catch { error('Could not create folder') }
     newFolderName = ''
     showNewFolder = false
+  }
+
+  async function handleTouch() {
+    const name = newFileName.trim()
+    if (!name) return
+    const path = get(currentPath)
+    const fullPath = path ? `${path}/${name}` : name
+    const res = await apiFetch('/api/files/touch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: fullPath })
+    })
+    if (res.ok) { success(`Created "${name}"`); await loadFiles(path) }
+    else error('Could not create file')
+    newFileName = ''
+    showNewFile = false
   }
 
   async function deleteSelected() {
@@ -201,6 +219,7 @@
             <button class="btn danger" onclick={deleteSelected}><Icon name="trash" size={14} /><span>Delete ({$selected.size})</span></button>
           {/if}
           <button class="btn primary" onclick={() => showNewFolder = !showNewFolder} title="New Folder (Ctrl+N)"><Icon name="plus" size={14} /><span>New Folder</span></button>
+          <button class="btn" onclick={() => showNewFile = !showNewFile} title="New file"><Icon name="file" size={14} /><span>New File</span></button>
         </div>
       </div>
     </div>
@@ -216,6 +235,15 @@
         />
         <button class="btn primary" onclick={handleMkdir}>Create</button>
         <button class="btn" onclick={() => showNewFolder = false}>Cancel</button>
+      </div>
+    {/if}
+
+    {#if showNewFile}
+      <div class="new-folder-bar">
+        <Icon name="file" size={14} />
+        <input placeholder="File name" bind:value={newFileName} onkeydown={(e) => { if (e.key === 'Enter') handleTouch(); if (e.key === 'Escape') showNewFile = false }} />
+        <button class="btn primary" onclick={handleTouch}>Create</button>
+        <button class="btn" onclick={() => showNewFile = false}>Cancel</button>
       </div>
     {/if}
 
