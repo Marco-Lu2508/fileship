@@ -69,8 +69,6 @@ func (h *Handler) writeText(w http.ResponseWriter, r *http.Request) {
 // --- Thumbnails ---
 
 func (h *Handler) thumbnail(w http.ResponseWriter, r *http.Request) {
-	// Token NUR aus Authorization Header — nie aus URL Query
-	// Der Endpoint liegt hinter der Auth-Middleware, claims sind bereits im Context
 	rel := r.URL.Query().Get("path")
 	root := h.userRoot(r)
 	thumbDir := thumbDirFromDB(h.cfg.DBPath)
@@ -81,19 +79,32 @@ func (h *Handler) thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !fsvc.IsImage(rel) {
-		http.Error(w, "not an image", http.StatusBadRequest)
+	// Bild-Thumbnail
+	if fsvc.IsImage(rel) {
+		thumbName, err := fsvc.GenerateThumbnail(root, rel, thumbDir)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		http.ServeFile(w, r, filepath.Join(thumbDir, thumbName))
 		return
 	}
 
-	thumbName, err := fsvc.GenerateThumbnail(root, rel, thumbDir)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// Video-Thumbnail (optional, nur wenn ffmpeg verfügbar)
+	if fsvc.IsVideo(rel) {
+		thumbName, err := fsvc.GenerateVideoThumbnail(root, rel, thumbDir)
+		if err != nil {
+			// ffmpeg nicht verfügbar oder fehlgeschlagen — 404
+			http.Error(w, "thumbnail not available", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		http.ServeFile(w, r, filepath.Join(thumbDir, thumbName))
 		return
 	}
 
-	w.Header().Set("Cache-Control", "private, max-age=3600")
-	http.ServeFile(w, r, filepath.Join(thumbDir, thumbName))
+	http.Error(w, "not an image or video", http.StatusBadRequest)
 }
 
 // --- Settings (User-Einstellungen) ---

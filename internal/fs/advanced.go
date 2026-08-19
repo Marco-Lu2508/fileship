@@ -6,6 +6,7 @@ import (
 	"image/jpeg"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +14,67 @@ import (
 )
 
 const maxUnzipSize = 2 << 30 // 2GB Limit
+
+// ffmpegAvailable prüft einmalig ob ffmpeg vorhanden ist
+var ffmpegPath, _ = exec.LookPath("ffmpeg")
+
+// IsVideo prüft ob eine Datei ein Video ist
+func IsVideo(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".mp4", ".m4v", ".webm", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".ogv":
+		return true
+	}
+	return false
+}
+
+// GenerateVideoThumbnail erzeugt ein Thumbnail aus einem Video via ffmpeg
+// Gibt einen Fehler zurück wenn ffmpeg nicht vorhanden ist
+func GenerateVideoThumbnail(root, rel, thumbDir string) (string, error) {
+	if ffmpegPath == "" {
+		return "", fmt.Errorf("ffmpeg not available")
+	}
+	abs, err := Resolve(root, rel)
+	if err != nil {
+		return "", err
+	}
+
+	thumbName := strings.ReplaceAll(rel, string(os.PathSeparator), "_") + ".jpg"
+	thumbPath := filepath.Join(thumbDir, thumbName)
+
+	if err := os.MkdirAll(thumbDir, 0755); err != nil {
+		return "", err
+	}
+
+	// ffmpeg: Frame bei 5s extrahieren, auf 256x256 skalieren, 1 Frame
+	cmd := exec.Command(ffmpegPath,
+		"-ss", "00:00:05",
+		"-i", abs,
+		"-vframes", "1",
+		"-vf", "thumbnail,scale=256:256:force_original_aspect_ratio=increase,crop=256:256",
+		"-q:v", "3",
+		"-y", thumbPath,
+	)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		// Fallback: Frame bei 0s
+		cmd2 := exec.Command(ffmpegPath,
+			"-i", abs,
+			"-vframes", "1",
+			"-vf", "scale=256:256:force_original_aspect_ratio=increase,crop=256:256",
+			"-q:v", "3",
+			"-y", thumbPath,
+		)
+		if err2 := cmd2.Run(); err2 != nil {
+			return "", fmt.Errorf("ffmpeg failed: %w", err2)
+		}
+	}
+	return thumbName, nil
+}
+
+// FFmpegAvailable gibt zurück ob ffmpeg gefunden wurde
+func FFmpegAvailable() bool { return ffmpegPath != "" }
 
 // Unzip entpackt ein ZIP-Archiv in das Zielverzeichnis
 func Unzip(root, zipRel, destRel string) error {

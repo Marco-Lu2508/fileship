@@ -15,17 +15,32 @@ const (
 )
 
 type Claims struct {
-	UserID  int64  `json:"uid"`
-	IsAdmin bool   `json:"adm"`
+	UserID       int64  `json:"uid"`
+	IsAdmin      bool   `json:"adm"`
+	TwoFAPending bool   `json:"2fa_pending,omitempty"` // true = 2FA noch nicht abgeschlossen
 	jwt.RegisteredClaims
 }
 
 func GenerateAccessToken(secret string, userID int64, isAdmin bool) (string, error) {
+	return generateToken(secret, userID, isAdmin, false)
+}
+
+// GeneratePendingToken erzeugt ein kurzlebiges Token das nur 2FA-Verify erlaubt
+func GeneratePendingToken(secret string, userID int64, isAdmin bool) (string, error) {
+	return generateToken(secret, userID, isAdmin, true)
+}
+
+func generateToken(secret string, userID int64, isAdmin bool, pending bool) (string, error) {
+	dur := accessTokenDuration
+	if pending {
+		dur = 5 * time.Minute // Sehr kurz — nur für 2FA-Step
+	}
 	claims := Claims{
-		UserID:  userID,
-		IsAdmin: isAdmin,
+		UserID:       userID,
+		IsAdmin:      isAdmin,
+		TwoFAPending: pending,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenDuration)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(dur)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

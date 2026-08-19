@@ -20,15 +20,35 @@ func (d *DB) migrateExtra() error {
 			created_at DATETIME NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS share_links (
-			token      TEXT PRIMARY KEY,
-			path       TEXT    NOT NULL,
-			is_dir     BOOLEAN NOT NULL DEFAULT 0,
-			created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			expires_at DATETIME,
-			created_at DATETIME NOT NULL
+			token          TEXT PRIMARY KEY,
+			path           TEXT    NOT NULL,
+			is_dir         BOOLEAN NOT NULL DEFAULT 0,
+			created_by     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			expires_at     DATETIME,
+			created_at     DATETIME NOT NULL,
+			password_hash  TEXT    NOT NULL DEFAULT '',
+			download_limit INTEGER NOT NULL DEFAULT 0,
+			download_count INTEGER NOT NULL DEFAULT 0,
+			allow_upload   BOOLEAN NOT NULL DEFAULT 0,
+			allow_edit     BOOLEAN NOT NULL DEFAULT 0
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Migration für bereits existierende share_links-Tabellen
+	for _, stmt := range []string{
+		"ALTER TABLE share_links ADD COLUMN password_hash  TEXT    NOT NULL DEFAULT ''",
+		"ALTER TABLE share_links ADD COLUMN download_limit INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE share_links ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE share_links ADD COLUMN allow_upload   BOOLEAN NOT NULL DEFAULT 0",
+		"ALTER TABLE share_links ADD COLUMN allow_edit     BOOLEAN NOT NULL DEFAULT 0",
+	} {
+		if _, err2 := d.Exec(stmt); err2 != nil && !isDuplicateColumnError(err2) {
+			return err2
+		}
+	}
+	return nil
 }
 
 // Audit Log
@@ -60,13 +80,13 @@ func (d *DB) GetAuditLog(limit int) ([]model.AuditEntry, error) {
 
 // Share Links
 
-func (d *DB) CreateShareLink(path string, isDir bool, createdBy int64, expiresAt *time.Time) (string, error) {
+func (d *DB) CreateShareLink(path string, isDir bool, createdBy int64, expiresAt *time.Time, passwordHash string, downloadLimit int, allowUpload bool, allowEdit bool) (string, error) {
 	b := make([]byte, 16)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 	_, err := d.Exec(
-		"INSERT INTO share_links (token, path, is_dir, created_by, expires_at, created_at) VALUES (?,?,?,?,?,?)",
-		token, path, isDir, createdBy, expiresAt, time.Now(),
+		"INSERT INTO share_links (token, path, is_dir, created_by, expires_at, created_at, password_hash, download_limit, download_count, allow_upload, allow_edit) VALUES (?,?,?,?,?,?,?,?,0,?,?)",
+		token, path, isDir, createdBy, expiresAt, time.Now(), passwordHash, downloadLimit, allowUpload, allowEdit,
 	)
 	return token, err
 }
@@ -74,9 +94,9 @@ func (d *DB) CreateShareLink(path string, isDir bool, createdBy int64, expiresAt
 func (d *DB) GetShareLink(token string) (*model.ShareLink, error) {
 	s := &model.ShareLink{}
 	err := d.QueryRow(
-		"SELECT token, path, is_dir, created_by, expires_at, created_at FROM share_links WHERE token = ?",
+		"SELECT token, path, is_dir, created_by, expires_at, created_at, password_hash, download_limit, download_count, allow_upload, allow_edit FROM share_links WHERE token = ?",
 		token,
-	).Scan(&s.Token, &s.Path, &s.IsDir, &s.CreatedBy, &s.ExpiresAt, &s.CreatedAt)
+	).Scan(&s.Token, &s.Path, &s.IsDir, &s.CreatedBy, &s.ExpiresAt, &s.CreatedAt, &s.PasswordHash, &s.DownloadLimit, &s.DownloadCount, &s.AllowUpload, &s.AllowEdit)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +104,20 @@ func (d *DB) GetShareLink(token string) (*model.ShareLink, error) {
 		d.Exec("DELETE FROM share_links WHERE token = ?", token)
 		return nil, nil
 	}
+	if s.DownloadLimit > 0 && s.DownloadCount >= s.DownloadLimit {
+		return nil, nil // limit erreicht
+	}
 	return s, nil
+}
+
+// IncrementShareDownload erhöht den Download-Counter
+func (d *DB) IncrementShareDownload(token string) {
+	d.Exec("UPDATE share_links SET download_count = download_count + 1 WHERE token = ?", token)
 }
 
 func (d *DB) ListShareLinks(userID int64) ([]model.ShareLink, error) {
 	rows, err := d.Query(
-		"SELECT token, path, is_dir, created_by, expires_at, created_at FROM share_links WHERE created_by = ? ORDER BY created_at DESC",
+		"SELECT token, path, is_dir, created_by, expires_at, created_at, password_hash, download_limit, download_count, allow_upload, allow_edit FROM share_links WHERE created_by = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -99,7 +127,7 @@ func (d *DB) ListShareLinks(userID int64) ([]model.ShareLink, error) {
 	var links []model.ShareLink
 	for rows.Next() {
 		var s model.ShareLink
-		rows.Scan(&s.Token, &s.Path, &s.IsDir, &s.CreatedBy, &s.ExpiresAt, &s.CreatedAt)
+		rows.Scan(&s.Token, &s.Path, &s.IsDir, &s.CreatedBy, &s.ExpiresAt, &s.CreatedAt, &s.PasswordHash, &s.DownloadLimit, &s.DownloadCount, &s.AllowUpload, &s.AllowEdit)
 		links = append(links, s)
 	}
 	return links, nil

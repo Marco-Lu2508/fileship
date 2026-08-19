@@ -42,7 +42,28 @@ func (d *DB) migrate() error {
 	if err != nil {
 		return err
 	}
-	return d.migrateQuotas()
+	if err := d.migrateQuotas(); err != nil {
+		return err
+	}
+	if err := d.migrateIndex(); err != nil {
+		return err
+	}
+	if err := d.migrateTokens(); err != nil {
+		return err
+	}
+	if err := d.migrateFavorites(); err != nil {
+		return err
+	}
+	if err := d.migratePermissions(); err != nil {
+		return err
+	}
+	if err := d.migrateTrash(); err != nil {
+		return err
+	}
+	if err := d.migrateSources(); err != nil {
+		return err
+	}
+	return d.migrateTOTP()
 }
 
 func (d *DB) CreateAdminIfNotExists(username, password, rootPath string) error {

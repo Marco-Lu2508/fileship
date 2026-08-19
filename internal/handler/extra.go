@@ -22,13 +22,30 @@ func (h *Handler) searchFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing query", http.StatusBadRequest)
 		return
 	}
-	results, err := fsvc.Search(h.userRoot(r), query)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	claims, _ := h.claimsUser(r)
+
+	// Index-Suche bevorzugen
+	results, err := h.db.IndexSearch(claims.UserID, query, 200)
+	if err != nil || len(results) == 0 {
+		// Fallback: direktes Filesystem-Walk
+		results, err = fsvc.Search(h.userRoot(r), query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
+}
+
+// reindex startet einen manuellen Neu-Index
+func (h *Handler) reindex(w http.ResponseWriter, r *http.Request) {
+	claims, _ := h.claimsUser(r)
+	root := h.userRoot(r)
+	h.indexer.TriggerReindex(claims.UserID, root)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "indexing"})
 }
 
 // --- ZIP Multi-Download ---
@@ -63,6 +80,9 @@ func (h *Handler) moveFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !h.checkPerm(w, r, body.Src, "write") {
+		return
+	}
 	root := h.userRoot(r)
 	if err := fsvc.Move(root, body.Src, body.Dst); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -85,6 +105,9 @@ func (h *Handler) copyFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !h.checkPerm(w, r, body.Src, "read") {
+		return
+	}
 	root := h.userRoot(r)
 	if err := fsvc.Copy(root, body.Src, body.Dst); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -100,9 +123,13 @@ func (h *Handler) copyFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Path      string `json:"path"`
-		IsDir     bool   `json:"is_dir"`
-		ExpiresIn *int   `json:"expires_in_hours,omitempty"`
+		Path          string `json:"path"`
+		IsDir         bool   `json:"is_dir"`
+		ExpiresIn     *int   `json:"expires_in_hours,omitempty"`
+		Password      string `json:"password,omitempty"`
+		DownloadLimit int    `json:"download_limit,omitempty"`
+		AllowUpload   bool   `json:"allow_upload,omitempty"`
+		AllowEdit     bool   `json:"allow_edit,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -114,12 +141,27 @@ func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if !h.checkPerm(w, r, body.Path, "share") {
+		return
+	}
 	var expiresAt *time.Time
 	if body.ExpiresIn != nil {
 		t := time.Now().Add(time.Duration(*body.ExpiresIn) * time.Hour)
 		expiresAt = &t
 	}
-	token, err := h.db.CreateShareLink(body.Path, body.IsDir, claims.UserID, expiresAt)
+
+	// Passwort hashen wenn angegeben
+	passwordHash := ""
+	if body.Password != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		passwordHash = string(hash)
+	}
+
+	token, err := h.db.CreateShareLink(body.Path, body.IsDir, claims.UserID, expiresAt, passwordHash, body.DownloadLimit, body.AllowUpload, body.AllowEdit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -134,6 +176,13 @@ func (h *Handler) listShares(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// HasPassword befüllen
+	for i := range links {
+		links[i].HasPassword = links[i].PasswordHash != ""
+	}
+	if links == nil {
+		links = []model.ShareLink{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(links)
@@ -154,6 +203,23 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "share not found or expired", http.StatusNotFound)
 		return
 	}
+
+	// Passwort-Check
+	if share.PasswordHash != "" {
+		pw := r.URL.Query().Get("pw")
+		if pw == "" {
+			// Passwort-Eingabe-Seite rendern
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(sharePasswordPage(token)))
+			return
+		}
+		if bcrypt.CompareHashAndPassword([]byte(share.PasswordHash), []byte(pw)) != nil {
+			http.Error(w, "wrong password", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	user, err := h.db.GetUserByID(share.CreatedBy)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -163,6 +229,10 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 	if user.RootPath != "/" && user.RootPath != "" {
 		root = user.RootPath
 	}
+
+	// Download-Counter erhöhen
+	h.db.IncrementShareDownload(token)
+
 	if share.IsDir {
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", `attachment; filename="share.zip"`)
@@ -177,6 +247,34 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 	mime, _ := fsvc.DetectMime(root, share.Path)
 	w.Header().Set("Content-Type", mime)
 	http.ServeFile(w, r, abs)
+}
+
+// sharePasswordPage liefert ein minimales HTML-Formular für Passwort-geschützte Shares
+func sharePasswordPage(token string) string {
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Protected Share</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#111827;color:#edf2f7;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#1d2a3d;border:1px solid #304158;border-radius:10px;padding:2rem;width:100%;max-width:360px;display:flex;flex-direction:column;gap:1rem}
+h2{font-size:1.1rem;color:#5ca7ff}
+p{color:#9aabc0;font-size:.85rem}
+input{background:#152238;border:1px solid #304158;color:#edf2f7;padding:.6rem .8rem;border-radius:6px;font-size:.9rem;width:100%}
+input:focus{outline:none;border-color:#5ca7ff}
+button{background:#5ca7ff;border:none;color:#fff;padding:.65rem;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:600}
+button:hover{background:#388be8}
+</style>
+</head><body>
+<div class="card">
+  <h2>🔒 Protected Share</h2>
+  <p>This link is password-protected. Enter the password to access it.</p>
+  <form method="GET">
+    <input type="hidden" name="token" value="` + token + `">
+    <input type="password" name="pw" placeholder="Password" autofocus required>
+    <br><br>
+    <button type="submit">Access file</button>
+  </form>
+</div>
+</body></html>`
 }
 
 // --- Me / Password ---

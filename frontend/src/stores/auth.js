@@ -3,6 +3,7 @@ import { csrfHeaders, ensureCSRFToken } from '../lib/csrf.js'
 
 export const user = writable(null)
 export const accessToken = writable(localStorage.getItem('access_token') || '')
+export const twoFAPending = writable(null) // { pending_token } wenn 2FA nötig
 
 let refreshTimer = null
 
@@ -14,8 +15,30 @@ export async function login(username, password) {
     body: JSON.stringify({ username, password })
   })
   if (!res.ok) throw new Error('Invalid credentials')
-  const tokens = await res.json()
-  setTokens(tokens)
+  const data = await res.json()
+
+  // 2FA erforderlich
+  if (data.requires_2fa) {
+    twoFAPending.set({ pending_token: data.pending_token })
+    return { requires2fa: true }
+  }
+
+  setTokens(data)
+  await fetchMe()
+  return { requires2fa: false }
+}
+
+export async function verify2FA(pendingToken, code) {
+  await ensureCSRFToken()
+  const res = await fetch('/api/auth/2fa/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ pending_token: pendingToken, code })
+  })
+  if (!res.ok) throw new Error('Invalid 2FA code')
+  const data = await res.json()
+  twoFAPending.set(null)
+  setTokens(data)
   await fetchMe()
 }
 

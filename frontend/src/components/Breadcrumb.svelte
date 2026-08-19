@@ -3,22 +3,23 @@
   import Icon from './Icon.svelte'
 
   export let path = ''
+  export let onNavigate = (p) => loadFiles(p)
 
   $: parts = path ? path.split('/').filter(Boolean) : []
 
-  function navigateTo(index) {
-    loadFiles(parts.slice(0, index + 1).join('/'))
+  function go(index) {
+    onNavigate(parts.slice(0, index + 1).join('/'))
   }
 </script>
 
 <nav class="breadcrumb" aria-label="Path">
-  <button onclick={() => loadFiles('')} class="crumb home" title="Home">
+  <button onclick={() => onNavigate('')} class="crumb home" title="Home">
     <Icon name="home" size={14} />
     <span>Home</span>
   </button>
   {#each parts as part, i}
     <span class="sep"><Icon name="chevron_r" size={12} /></span>
-    <button class="crumb" onclick={() => navigateTo(i)}>{part}</button>
+    <button class="crumb" onclick={() => go(i)}>{part}</button>
   {/each}
 </nav>
 

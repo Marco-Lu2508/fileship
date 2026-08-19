@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -18,32 +19,36 @@ import (
 )
 
 type Handler struct {
-	cfg *config.Config
-	db  *db.DB
-	hub *ws.Hub
+	cfg     *config.Config
+	db      *db.DB
+	hub     *ws.Hub
+	indexer *db.Indexer
 }
 
 func New(cfg *config.Config, database *db.DB, hub *ws.Hub) *Handler {
-	return &Handler{cfg: cfg, db: database, hub: hub}
+	ix := db.NewIndexer(database)
+	return &Handler{cfg: cfg, db: database, hub: hub, indexer: ix}
 }
 
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	// Rate Limiter: 5 Req/s Burst 10 für Login
 	loginLimiter := middleware.NewRateLimiter(5, 10)
-	// Globaler Rate Limiter: 50 Req/s Burst 100 pro IP für alle anderen Endpoints
 	globalLimiter := middleware.NewRateLimiter(50, 100)
 	r.Use(globalLimiter.Middleware)
 
 	r.Post("/api/auth/login", loginLimiter.Middleware(http.HandlerFunc(h.login)).ServeHTTP)
 	r.Post("/api/auth/refresh", h.refresh)
 	r.Post("/api/auth/logout", h.logout)
+	r.Post("/api/auth/2fa/verify", h.twoFAVerify) // Pending-Token → vollständiges Token
 	r.Get("/s/{token}", h.PublicShare)
 	r.Get("/ws", h.hub.Handle)
 
+	// Auth-Middleware mit API-Token-Support
+	authMW := middleware.AuthWithAPIToken(h.cfg.JWTSecret, h.db.ValidateAPIToken)
+
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(h.cfg.JWTSecret))
+		r.Use(authMW)
 
 		r.Get("/api/files", h.listFiles)
 		r.Post("/api/files/upload", h.uploadFile)
@@ -62,15 +67,40 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/api/files/text", h.readText)
 		r.Put("/api/files/text", h.writeText)
 		r.Get("/api/files/thumb", h.thumbnail)
+		r.Post("/api/files/reindex", h.reindex)
 		r.Get("/api/i18n", h.i18n)
 
 		r.Get("/api/me", h.me)
 		r.Post("/api/me/password", h.changePassword)
 		r.Get("/api/me/settings", h.getSettings)
 
+		// API-Tokens
+		r.Get("/api/me/tokens", h.listAPITokens)
+		r.Post("/api/me/tokens", h.createAPIToken)
+		r.Delete("/api/me/tokens/{id}", h.deleteAPIToken)
+
+		// Favoriten
+		r.Get("/api/me/favorites", h.listFavorites)
+		r.Post("/api/me/favorites", h.addFavorite)
+		r.Delete("/api/me/favorites", h.removeFavorite)
+
 		r.Get("/api/shares", h.listShares)
 		r.Post("/api/shares", h.createShare)
 		r.Delete("/api/shares/{token}", h.deleteShare)
+
+		// Phase 3: Trash, Sources, 2FA
+		r.Get("/api/trash", h.trashList)
+		r.Delete("/api/trash/{name}", h.trashDeletePermanent)
+		r.Post("/api/trash/{name}/restore", h.trashRestore)
+		r.Delete("/api/trash", h.trashEmpty)
+		r.Get("/api/me/sources", h.listSources)
+		r.Post("/api/me/sources", h.createSource)
+		r.Put("/api/me/sources/{id}", h.updateSource)
+		r.Delete("/api/me/sources/{id}", h.deleteSource)
+		r.Post("/api/me/2fa/setup", h.twoFASetup)
+		r.Post("/api/me/2fa/enable", h.twoFAEnable)
+		r.Delete("/api/me/2fa", h.twoFADisable)
+		r.Get("/api/me/2fa/status", h.twoFAStatus)
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AdminOnly)
@@ -81,8 +111,11 @@ func (h *Handler) Routes() http.Handler {
 			r.Put("/api/users/{id}/quota", h.setQuota)
 			r.Get("/api/audit", h.auditLog)
 			r.Get("/api/stats", h.stats)
+			// Pfad-Permissions (Admin verwaltet sie für User)
+			r.Get("/api/users/{id}/permissions", h.listPermissions)
+			r.Post("/api/users/{id}/permissions", h.setPermission)
+			r.Delete("/api/permissions/{pid}", h.deletePermission)
 		})
-
 	})
 
 	return r
@@ -109,6 +142,22 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
+
+	// 2FA prüfen — wenn aktiv: Pending-Token zurückgeben
+	if h.db.TOTPIsEnabled(user.ID) {
+		pending, err := auth.GeneratePendingToken(h.cfg.JWTSecret, user.ID, user.IsAdmin)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"requires_2fa":  true,
+			"pending_token": pending,
+		})
+		return
+	}
+
 	access, err := auth.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.IsAdmin)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -120,6 +169,55 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.db.SaveRefreshToken(refresh, user.ID, expires)
+	json.NewEncoder(w).Encode(model.TokenPair{AccessToken: access, RefreshToken: refresh})
+}
+
+// twoFAVerify tauscht ein Pending-Token gegen ein vollständiges Token ein
+func (h *Handler) twoFAVerify(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PendingToken string `json:"pending_token"`
+		Code         string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Pending-Token parsen
+	claims, err := auth.ParseAccessToken(h.cfg.JWTSecret, body.PendingToken)
+	if err != nil || !claims.TwoFAPending {
+		http.Error(w, "invalid pending token", http.StatusUnauthorized)
+		return
+	}
+
+	// TOTP-Code oder Backup-Code prüfen
+	secret, enabled, _ := h.db.TOTPGetSecret(claims.UserID)
+	if !enabled {
+		http.Error(w, "2FA not enabled", http.StatusBadRequest)
+		return
+	}
+
+	ok := auth.VerifyTOTP(secret, body.Code)
+	if !ok {
+		ok = h.db.TOTPUseBackupCode(claims.UserID, body.Code)
+	}
+	if !ok {
+		http.Error(w, "invalid 2FA code", http.StatusUnauthorized)
+		return
+	}
+
+	// Vollständiges Token ausstellen
+	access, err := auth.GenerateAccessToken(h.cfg.JWTSecret, claims.UserID, claims.IsAdmin)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	refresh, expires, err := auth.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	h.db.SaveRefreshToken(refresh, claims.UserID, expires)
 	json.NewEncoder(w).Encode(model.TokenPair{AccessToken: access, RefreshToken: refresh})
 }
 
@@ -197,8 +295,48 @@ func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Ordnergröße für Unterordner einfügen (gecacht, non-blocking)
+	claims, _ := h.claimsUser(r)
+	root := h.userRoot(r)
+
+	// Favoriten-Set für diesen User laden
+	starredSet := h.db.FavoritePathSet(claims.UserID)
+
+	for i, f := range result.Files {
+		if f.IsDir {
+			result.Files[i].DirSize = h.getDirSizeCached(root, f.Path)
+		}
+		if starredSet[f.Path] {
+			result.Files[i].Starred = true
+		}
+	}
+
+	// Index-Trigger beim ersten Listing (falls Index noch leer)
+	if h.db.IndexCountForUser(claims.UserID) == 0 {
+		h.indexer.TriggerReindex(claims.UserID, root)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// getDirSizeCached gibt gecachte Ordnergröße zurück oder startet Berechnung im Hintergrund
+func (h *Handler) getDirSizeCached(root, relPath string) int64 {
+	cacheKey := root + "|" + relPath
+	if size, ok := h.db.DirSizeCacheGet(cacheKey, 5*time.Minute); ok {
+		return size
+	}
+	go func() {
+		abs, err := fsvc.Resolve(root, relPath)
+		if err != nil {
+			return
+		}
+		if size, err := fsvc.DirSize(abs); err == nil {
+			h.db.DirSizeCacheSet(cacheKey, size)
+		}
+	}()
+	return 0
 }
 
 func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
@@ -208,6 +346,9 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := r.FormValue("path")
+	if !h.checkPerm(w, r, dir, "write") {
+		return
+	}
 	root := h.userRoot(r)
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
 	files := r.MultipartForm.File["files"]
@@ -253,15 +394,37 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+safeName, r.RemoteAddr)
 	}
 	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: dir})
+	// Index aktualisieren
+	h.indexer.TriggerReindex(claims.UserID, root)
 	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
-	if err := fsvc.Delete(h.userRoot(r), path); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !h.checkPerm(w, r, path, "delete") {
 		return
 	}
+	claims, _ := h.claimsUser(r)
+	root := h.userRoot(r)
+
+	// Soft-Delete: in Papierkorb verschieben (permanent=true überspringt das)
+	permanent := r.URL.Query().Get("permanent") == "true"
+	if permanent {
+		if err := fsvc.Delete(root, path); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		if err := h.SoftDelete(claims.UserID, root, path); err != nil {
+			// Fallback auf hard delete wenn Papierkorb nicht funktioniert
+			if err2 := fsvc.Delete(root, path); err2 != nil {
+				http.Error(w, err2.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
+	h.db.IndexDelete(claims.UserID, path)
 	h.hub.Broadcast(model.WSEvent{Type: "delete", Path: path})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -297,16 +460,24 @@ func (h *Handler) renameFile(w http.ResponseWriter, r *http.Request) {
 		New string `json:"new"`
 	}
 	json.NewDecoder(r.Body).Decode(&body)
+	if !h.checkPerm(w, r, body.Old, "write") {
+		return
+	}
+	claims, _ := h.claimsUser(r)
 	if err := fsvc.Rename(h.userRoot(r), body.Old, body.New); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	h.db.IndexRename(claims.UserID, body.Old, body.New)
 	h.hub.Broadcast(model.WSEvent{Type: "rename", Path: body.New})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
+	if !h.checkPerm(w, r, rel, "read") {
+		return
+	}
 	root := h.userRoot(r)
 	abs, err := fsvc.Resolve(root, rel)
 	if err != nil {
@@ -321,6 +492,9 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
+	if !h.checkPerm(w, r, rel, "read") {
+		return
+	}
 	root := h.userRoot(r)
 	abs, err := fsvc.Resolve(root, rel)
 	if err != nil {

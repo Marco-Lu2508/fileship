@@ -5,10 +5,12 @@
   const iconMap = { success: 'check', error: 'warning', info: 'info' }
 </script>
 
-<div class="toast-container" aria-live="polite">
+<div class="toast-container" aria-live="polite" aria-atomic="false">
   {#each $toasts as t (t.id)}
     <div class="toast {t.type}" role="alert">
-      <span class="toast-icon"><Icon name={iconMap[t.type] || 'info'} size={14} /></span>
+      <span class="toast-icon {t.type}">
+        <Icon name={iconMap[t.type] || 'info'} size={13} />
+      </span>
       <span class="toast-msg">{t.message}</span>
     </div>
   {/each}
@@ -16,22 +18,54 @@
 
 <style>
   .toast-container {
-    position: fixed; bottom: 1.25rem; right: 1.25rem;
-    display: flex; flex-direction: column; gap: 0.4rem; z-index: 1000;
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1200;
+    pointer-events: none;
   }
+
   .toast {
-    padding: 0.6rem 1rem; border-radius: 4px; font-size: 0.85rem;
-    display: flex; align-items: center; gap: 0.5rem;
-    animation: slide-in 0.15s ease; max-width: 340px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem 0.65rem 0.75rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
     box-shadow: var(--shadow);
+    max-width: 360px;
+    animation: toast-in 0.2s cubic-bezier(.2,.8,.3,1) both;
+    pointer-events: auto;
   }
-  .toast.success { background: var(--surface); border: 1px solid var(--success); color: var(--success); }
-  .toast.error   { background: var(--surface); border: 1px solid var(--danger);  color: var(--danger); }
-  .toast.info    { background: var(--surface); border: 1px solid var(--border);  color: var(--text); }
-  .toast-icon { display: flex; flex-shrink: 0; }
-  .toast-msg { flex: 1; }
-  @keyframes slide-in {
-    from { transform: translateX(100%); opacity: 0; }
-    to   { transform: translateX(0);    opacity: 1; }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(20px) scale(0.95); }
+    to   { opacity: 1; transform: none; }
   }
+
+  .toast-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .toast-icon.success { background: var(--success-bg); color: var(--success); }
+  .toast-icon.error   { background: var(--danger-bg);  color: var(--danger); }
+  .toast-icon.info    { background: var(--accent-soft); color: var(--accent); }
+
+  .toast.success { border-color: var(--success); }
+  .toast.error   { border-color: var(--danger); }
+
+  .toast-msg { flex: 1; line-height: 1.4; }
 </style>

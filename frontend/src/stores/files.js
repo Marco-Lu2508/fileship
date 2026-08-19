@@ -7,6 +7,26 @@ export const loading = writable(false)
 export const selected = writable(new Set())
 let listController = null
 
+// Scroll-Position pro Pfad speichern
+export function saveScrollPosition(path, y) {
+  try {
+    const key = 'fileship_scroll'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[path] = y
+    // Maximal 50 Pfade cachen
+    const keys = Object.keys(map)
+    if (keys.length > 50) delete map[keys[0]]
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
+export function getScrollPosition(path) {
+  try {
+    const map = JSON.parse(localStorage.getItem('fileship_scroll') || '{}')
+    return map[path] ?? 0
+  } catch { return 0 }
+}
+
 export async function loadFiles(path = '') {
   listController?.abort()
   const controller = new AbortController()

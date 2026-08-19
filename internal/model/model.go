@@ -23,12 +23,14 @@ type UserWithQuota struct {
 }
 
 type FileInfo struct {
-	Name    string    `json:"name"`
-	Path    string    `json:"path"`
-	Size    int64     `json:"size"`
-	IsDir   bool      `json:"is_dir"`
-	ModTime time.Time `json:"mod_time"`
-	MimeType string   `json:"mime_type,omitempty"`
+	Name     string    `json:"name"`
+	Path     string    `json:"path"`
+	Size     int64     `json:"size"`
+	IsDir    bool      `json:"is_dir"`
+	ModTime  time.Time `json:"mod_time"`
+	MimeType string    `json:"mime_type,omitempty"`
+	DirSize  int64     `json:"dir_size,omitempty"` // Gecachte Ordnergröße
+	Starred  bool      `json:"starred,omitempty"` // Ist in Favoriten
 }
 
 type LoginRequest struct {
