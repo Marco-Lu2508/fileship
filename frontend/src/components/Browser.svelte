@@ -136,8 +136,8 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <Icon name="home" size={16} />
-      <span>Fileship</span>
+      <span class="brand-mark"><Icon name="folder" size={18} /></span>
+      <span class="brand-copy"><strong>Fileship</strong><small>File manager</small></span>
     </div>
     <nav class="sidebar-nav">
       <button class="nav-item active" onclick={() => loadFiles('')}>
@@ -171,35 +171,22 @@
 
   <!-- Main -->
   <div class="main">
-    <!-- Toolbar -->
     <div class="toolbar">
-      <Breadcrumb path={$currentPath} />
+      <div class="location">
+        <span class="location-title">Files</span>
+        <Breadcrumb path={$currentPath} />
+      </div>
       <div class="toolbar-right">
         <div class="search-wrap">
           <span class="search-icon"><Icon name="search" size={14} /></span>
-          <input
-            class="search"
-            placeholder="Search..."
-            bind:value={searchQuery}
-            oninput={onSearch}
-            aria-label="Search files"
-          />
+          <input class="search" placeholder="Search..." bind:value={searchQuery} oninput={onSearch} aria-label="Search files" />
         </div>
         <div class="actions">
           {#if $selected.size > 0}
-            <button class="btn" onclick={downloadSelected} title="Download as ZIP">
-              <Icon name="download" size={14} />
-              <span>ZIP ({$selected.size})</span>
-            </button>
-            <button class="btn danger" onclick={deleteSelected}>
-              <Icon name="trash" size={14} />
-              <span>Delete ({$selected.size})</span>
-            </button>
+            <button class="btn" onclick={downloadSelected} title="Download as ZIP"><Icon name="download" size={14} /><span>ZIP ({$selected.size})</span></button>
+            <button class="btn danger" onclick={deleteSelected}><Icon name="trash" size={14} /><span>Delete ({$selected.size})</span></button>
           {/if}
-          <button class="btn primary" onclick={() => showNewFolder = !showNewFolder} title="New Folder (Ctrl+N)">
-            <Icon name="plus" size={14} />
-            <span>New Folder</span>
-          </button>
+          <button class="btn primary" onclick={() => showNewFolder = !showNewFolder} title="New Folder (Ctrl+N)"><Icon name="plus" size={14} /><span>New Folder</span></button>
         </div>
       </div>
     </div>
@@ -310,27 +297,31 @@
 
   /* Sidebar */
   .sidebar {
-    width: 200px; flex-shrink: 0;
+    width: 232px; flex-shrink: 0;
     background: var(--header-bg); border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
-    position: sticky; top: 0; height: 100vh;
+    position: sticky; top: 0; height: 100vh; box-shadow: 1px 0 0 var(--border);
   }
   .sidebar-brand {
     display: flex; align-items: center; gap: 0.6rem;
-    padding: 1rem 1rem 0.75rem;
+    padding: 1.1rem 1.15rem 1.2rem;
     font-size: 1rem; font-weight: 600; color: var(--text);
     border-bottom: 1px solid var(--border);
   }
-  .sidebar-nav { flex: 1; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.1rem; }
+  .brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 7px; background: var(--accent); color: white; }
+  .brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
+  .brand-copy strong { font-size: 1rem; letter-spacing: 0.01em; }
+  .brand-copy small { color: var(--text2); font-size: 0.7rem; font-weight: 400; margin-top: 0.18rem; }
+  .sidebar-nav { flex: 1; padding: 0.85rem 0.7rem; display: flex; flex-direction: column; gap: 0.2rem; }
   .nav-item {
     display: flex; align-items: center; gap: 0.6rem;
-    padding: 0.45rem 0.6rem; border-radius: 4px;
+    padding: 0.65rem 0.7rem; border-radius: 6px;
     font-size: 0.875rem; color: var(--text2);
     background: none; border: none; cursor: pointer; text-decoration: none;
     text-align: left; width: 100%;
   }
   .nav-item:hover { background: var(--row-hover); color: var(--text); }
-  .nav-item.active { background: var(--row-hover); color: var(--accent); }
+  .nav-item.active { background: #e8f2fc; color: var(--accent); font-weight: 600; }
   .sidebar-footer {
     padding: 0.75rem; border-top: 1px solid var(--border);
     display: flex; align-items: center; gap: 0.4rem;
@@ -341,28 +332,30 @@
   .icon-btn:hover { background: var(--border); color: var(--text); }
 
   /* Main */
-  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 1rem 1.25rem; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 1.5rem 2rem; }
 
   /* Toolbar */
   .toolbar {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+    gap: 1rem; margin-bottom: 1.1rem; flex-wrap: wrap;
   }
+  .location { display: flex; flex-direction: column; gap: 0.3rem; }
+  .location-title { color: var(--text); font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; }
   .toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .search-wrap { position: relative; }
   .search-icon { position: absolute; left: 0.5rem; top: 50%; transform: translateY(-50%); color: var(--text2); display: flex; pointer-events: none; }
   .search {
     background: var(--input-bg); border: 1px solid var(--border);
-    color: var(--text); padding: 0.4rem 0.75rem 0.4rem 1.75rem;
-    border-radius: 4px; font-size: 0.85rem; width: 200px;
+    color: var(--text); padding: 0.55rem 0.8rem 0.55rem 1.9rem;
+    border-radius: 6px; font-size: 0.85rem; width: 240px;
   }
   .search:focus { outline: none; border-color: var(--accent); }
   .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
   .btn {
     display: flex; align-items: center; gap: 0.35rem;
     background: var(--surface); border: 1px solid var(--border);
-    color: var(--text); padding: 0.35rem 0.7rem;
-    border-radius: 4px; cursor: pointer; font-size: 0.82rem;
+    color: var(--text); padding: 0.5rem 0.8rem;
+    border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 550;
   }
   .btn:hover { background: var(--row-hover); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -381,19 +374,17 @@
     flex: 1; background: none; border: none; color: var(--text);
     font-size: 0.875rem; outline: none;
   }
-
-  /* Table */
-  .table-wrap { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .table-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow); }
   .table-meta {
-    padding: 0.4rem 0.75rem; font-size: 0.78rem; color: var(--text2);
-    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0.7rem 1rem; font-size: 0.78rem; color: var(--text2);
+    background: var(--surface2); border-bottom: 1px solid var(--border);
     display: flex; justify-content: space-between;
   }
   .shortcuts { color: var(--text2); }
   table { width: 100%; border-collapse: collapse; }
-  thead tr { background: var(--surface); }
+  thead tr { background: var(--surface2); }
   th {
-    padding: 0.5rem 0.75rem; text-align: left;
+    padding: 0.7rem 1rem; text-align: left;
     font-size: 0.75rem; color: var(--text2);
     text-transform: uppercase; letter-spacing: 0.05em;
     border-bottom: 1px solid var(--border);
@@ -403,7 +394,7 @@
   th.sortable:hover { color: var(--text); }
   th.col-check { width: 2rem; }
   .empty {
-    padding: 3rem; text-align: center; color: var(--text2);
+    padding: 5rem 3rem; text-align: center; color: var(--text2);
     display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
   }
   .empty p { font-size: 0.875rem; }
@@ -411,7 +402,7 @@
   @media (max-width: 640px) {
     .sidebar { display: none; }
     .hide-mobile { display: none; }
-    .main { padding: 0.75rem; }
+    .main { padding: 1rem 0.75rem; }
     .search { width: 140px; }
   }
 </style>

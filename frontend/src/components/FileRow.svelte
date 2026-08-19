@@ -132,25 +132,25 @@
 </tr>
 
 <style>
-  .row { border-bottom: 1px solid var(--border); }
+  .row { border-bottom: 1px solid var(--border); transition: background 0.12s ease; }
   .row:hover { background: var(--row-hover); }
   .row.drag-over { background: var(--row-hover); outline: 2px dashed var(--accent); outline-offset: -2px; }
-  td { padding: 0.45rem 0.75rem; vertical-align: middle; }
+  td { padding: 0.72rem 1rem; vertical-align: middle; }
   .col-check { width: 2rem; }
   .col-name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-  .file-icon { color: var(--text2); display: flex; flex-shrink: 0; }
+  .file-icon { color: #8494a7; display: flex; flex-shrink: 0; }
   .file-icon.is-dir { color: var(--accent); }
   .name-btn {
     background: none; border: none; color: var(--text);
-    cursor: pointer; font-size: 0.875rem; text-align: left; padding: 0;
+    cursor: pointer; font-size: 0.9rem; text-align: left; padding: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;
   }
   .name-btn:hover { color: var(--accent); text-decoration: underline; }
-  .col-size, .col-date { color: var(--text2); font-size: 0.8rem; white-space: nowrap; }
+  .col-size, .col-date { color: var(--text2); font-size: 0.82rem; white-space: nowrap; }
   .col-actions { display: flex; gap: 0.1rem; align-items: center; }
   .action-btn {
     background: none; border: none; color: var(--text2);
-    cursor: pointer; padding: 0.3rem; border-radius: 3px;
+    cursor: pointer; padding: 0.4rem; border-radius: 5px;
     display: flex; align-items: center; text-decoration: none;
   }
   .action-btn:hover { background: var(--border); color: var(--text); }

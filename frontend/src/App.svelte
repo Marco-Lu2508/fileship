@@ -33,25 +33,24 @@
   /* ── Dark (default) ─────────────────────────────── */
   :global(:root),
   :global([data-theme="dark"]) {
-    --bg:          #1a1a2e;
-    --bg2:         #16213e;
-    --surface:     #0f3460;
-    --surface2:    #1a1a2e;
-    --border:      #1f4068;
-    --text:        #e0e0e0;
-    --text2:       #a0a0b0;
-    --accent:      #e94560;
-    --accent-h:    #c73652;
-    --danger:      #e94560;
-    --danger-bg:   #2a1020;
-    --success:     #4caf50;
-    --skel:        #1f4068;
-    --input-bg:    #0f3460;
-    --header-bg:   #16213e;
-    --row-hover:   #0f3460;
-    --shadow:      0 1px 3px rgba(0,0,0,0.4);
+    --bg:          #f4f6f8;
+    --bg2:         #e9edf2;
+    --surface:     #ffffff;
+    --surface2:    #f8fafc;
+    --border:      #d9e0e7;
+    --text:        #243447;
+    --text2:       #718096;
+    --accent:      #1976d2;
+    --accent-h:    #125ca8;
+    --danger:      #d64545;
+    --danger-bg:   #fff1f1;
+    --success:     #2f8f5b;
+    --skel:        #e3e9ef;
+    --input-bg:    #ffffff;
+    --header-bg:   #ffffff;
+    --row-hover:   #f1f6fb;
+    --shadow:      0 1px 2px rgba(31, 45, 61, 0.08), 0 8px 24px rgba(31, 45, 61, 0.04);
   }
-
   /* ── Light ──────────────────────────────────────── */
   :global([data-theme="light"]) {
     --bg:          #f5f5f5;
@@ -138,7 +137,7 @@
 
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
   :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
     font-size: 14px;
