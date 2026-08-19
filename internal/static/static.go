@@ -16,10 +16,13 @@ func FileServer() http.Handler {
 	}
 	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the file, fall back to index.html for SPA routing
-		_, err := dist.(fs.StatFS).Stat(r.URL.Path[1:])
-		if err != nil {
-			r.URL.Path = "/"
+			path := r.URL.Path[1:]
+			if path == "" {
+				http.ServeFileFS(w, r, dist, "index.html")
+				return
+			} else if _, err := fs.Stat(dist, path); err != nil {
+				http.ServeFileFS(w, r, dist, "index.html")
+				return
 		}
 		fileServer.ServeHTTP(w, r)
 	})
