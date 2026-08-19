@@ -10,8 +10,6 @@ RUN npm run build
 FROM golang:1.23-alpine AS backend-builder
 RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
-COPY go.mod go.sum ./
-COPY vendor/ ./vendor/
 COPY . .
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship ./cmd/fileship
