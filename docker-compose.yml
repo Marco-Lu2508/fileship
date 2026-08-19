@@ -1,7 +1,6 @@
 services:
   fileship:
     image: ghcr.io/marco-lu2508/fileship:latest
-    build: .
     ports:
       - "8080:8080"
     volumes:

@@ -8,15 +8,46 @@ A fast, self-hosted file browser. Spiritual successor to [filebrowser](https://g
 
 ## Quick Start
 
+No repository checkout or database setup is required. Docker keeps the files and database in named volumes.
+
+### Docker Run
+
 ```bash
-git clone https://github.com/Marco-Lu2508/fileship.git
-cd fileship
-cp .env.example .env
-# .env öffnen und ADMIN_PASSWORD + JWT_SECRET setzen
+docker run -d \
+  --name fileship \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v fileship-data:/data \
+  -v fileship-db:/app \
+  -e ADMIN_PASSWORD=change-this-password \
+  ghcr.io/marco-lu2508/fileship:latest
+```
+
+Open **http://localhost:8080** and log in as `admin` with the password from `ADMIN_PASSWORD`.
+
+Stop or update it with:
+
+```bash
+docker stop fileship
+docker rm fileship
+docker pull ghcr.io/marco-lu2508/fileship:latest
+```
+
+Run the same `docker run` command again to start the updated image with the existing volumes.
+
+### Docker Compose
+
+```bash
 docker compose up -d
 ```
 
-Open **http://localhost:8080** and login with your configured credentials.
+Open **http://localhost:8080** and log in with the default local credentials from the Compose file. Set `ADMIN_PASSWORD` and `JWT_SECRET` in `.env` before exposing the service beyond your local machine.
+
+```bash
+docker compose logs fileship
+```
+
+The application serves its own web UI. A reverse proxy is only needed when adding a custom domain or HTTPS.
 
 ---
 
