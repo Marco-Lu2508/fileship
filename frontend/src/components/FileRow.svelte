@@ -142,7 +142,7 @@
   draggable="true"
   ondragstart={(e) => e.dataTransfer.setData('fileship/path', file.path)}
   ondragover={(e) => file.is_dir && onDragOver(e, file.path)}
-  ondragleave={() => onDragOver(null, null)}
+  ondragleave={() => { dragOverPath = null }}
   ondrop={(e) => file.is_dir && onDrop(e, file.path)}
 >
   <!-- Checkbox -->

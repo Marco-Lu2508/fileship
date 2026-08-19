@@ -165,10 +165,14 @@
     setTimeout(() => indexing = false, 2000)
   }
 
-  async function handleDragOver(e, targetPath) { e.preventDefault(); dragOverPath = targetPath }
+  async function handleDragOver(e, targetPath) {
+    if (e) e.preventDefault()
+    dragOverPath = targetPath
+  }
 
   async function handleDrop(e, targetPath) {
-    e.preventDefault(); dragOverPath = null
+    if (e) e.preventDefault()
+    dragOverPath = null
     const srcPath = e.dataTransfer.getData('fileship/path')
     if (!srcPath || srcPath === targetPath) return
     const name = srcPath.split('/').pop()
