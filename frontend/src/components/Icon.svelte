@@ -48,6 +48,8 @@
     bar_chart:   'M18 20V10 M12 20V4 M6 20v-6',
     list:        'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
     grid:        'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
+    globe:       'M12 22a10 10 0 100-20 10 10 0 000 20z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20',
+    lock:        'M5 11h14v10H5z M8 11V7a4 4 0 018 0v4',
   }
 </script>
 

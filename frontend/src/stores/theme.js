@@ -11,7 +11,9 @@ export const THEMES = [
 const stored = localStorage.getItem('theme') || 'dark'
 export const theme = writable(stored)
 
-theme.subscribe(t => {
+export function applyTheme(t) {
   localStorage.setItem('theme', t)
-  document.documentElement.setAttribute('data-theme', t)
-})
+  if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', t)
+}
+
+theme.subscribe(applyTheme)

@@ -3,6 +3,7 @@
   import { apiFetch } from '../stores/auth.js'
   import { success, error } from '../stores/toast.js'
   import { locale } from '../stores/i18n.js'
+  import Icon from './Icon.svelte'
 
   export let onClose = () => {}
 
@@ -51,7 +52,7 @@
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="settings-modal">
     <div class="settings-header">
-      <span>⚙️ Settings</span>
+      <span><Icon name="settings" size={15} /> Settings</span>
       <button class="close" onclick={onClose}>✕</button>
     </div>
 
@@ -59,7 +60,7 @@
 
       <!-- Storage -->
       <section>
-        <h3>💾 Storage</h3>
+        <h3><Icon name="save" size={15} /> Storage</h3>
         {#if settings}
           <div class="info-row">
             <span>Used</span>
@@ -88,18 +89,18 @@
 
       <!-- WebDAV -->
       <section>
-        <h3>🔗 WebDAV</h3>
+        <h3><Icon name="webdav" size={15} /> WebDAV</h3>
         <p class="muted">Connect with Finder, Windows Explorer, Cyberduck or any WebDAV client:</p>
         <div class="webdav-url">
           <code>{webdavUrl}</code>
-          <button onclick={() => { navigator.clipboard.writeText(webdavUrl); success('Copied!') }}>📋</button>
+          <button onclick={() => { navigator.clipboard.writeText(webdavUrl); success('Copied!') }} title="Copy URL"><Icon name="clipboard" size={14} /></button>
         </div>
         <p class="muted small">Use your Fileship username and password to authenticate.</p>
       </section>
 
       <!-- Language -->
       <section>
-        <h3>🌍 Language</h3>
+        <h3><Icon name="globe" size={15} /> Language</h3>
         <select bind:value={$locale}>
           <option value="en">English</option>
           <option value="de">Deutsch</option>
@@ -108,7 +109,7 @@
 
       <!-- Password -->
       <section>
-        <h3>🔐 Change Password</h3>
+        <h3><Icon name="lock" size={15} /> Change Password</h3>
         <div class="form">
           <input type="password" placeholder="Current password" bind:value={oldPassword} />
           <input type="password" placeholder="New password (min 8 chars)" bind:value={newPassword} />

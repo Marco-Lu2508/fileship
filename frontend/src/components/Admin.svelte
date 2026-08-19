@@ -3,6 +3,7 @@
   import { apiFetch } from '../stores/auth.js'
   import { success, error } from '../stores/toast.js'
   import Toast from './Toast.svelte'
+  import Icon from './Icon.svelte'
 
   let tab = 'users'
   let users = []
@@ -88,14 +89,14 @@
 
 <div class="admin">
   <div class="admin-header">
-    <span class="brand">🚀 Fileship <span class="badge">Admin</span></span>
+    <span class="brand"><Icon name="folder" size={18} /> Fileship <span class="badge">Admin</span></span>
     <a href="/" class="back">← Back to Files</a>
   </div>
 
   <nav class="tabs">
-    <button class:active={tab==='users'} onclick={() => tab='users'}>👥 Users</button>
-    <button class:active={tab==='stats'} onclick={() => tab='stats'}>📊 Stats</button>
-    <button class:active={tab==='audit'} onclick={() => tab='audit'}>📋 Audit Log</button>
+    <button class:active={tab==='users'} onclick={() => tab='users'}><Icon name="users" size={15} /> Users</button>
+    <button class:active={tab==='stats'} onclick={() => tab='stats'}><Icon name="bar_chart" size={15} /> Stats</button>
+    <button class:active={tab==='audit'} onclick={() => tab='audit'}><Icon name="clipboard" size={15} /> Audit Log</button>
   </nav>
 
   <div class="tab-content">
@@ -138,7 +139,7 @@
                 <td>{new Date(u.created_at).toLocaleDateString()}</td>
                 <td class="row-actions">
                   <button class="icon-btn" onclick={() => { editingQuota = editingQuota === u.id ? null : u.id; quotaForm[u.id] = { quota_mb: Math.round((u.quota_bytes||0)/1024/1024), allowed_types: u.allowed_types||'' } }} title="Quota">⚙️</button>
-                  <button class="icon-btn danger" onclick={() => deleteUser(u.id)} title="Delete">🗑️</button>
+                  <button class="icon-btn danger" onclick={() => deleteUser(u.id)} title="Delete"><Icon name="trash" size={14} /></button>
                 </td>
               </tr>
               {#if editingQuota === u.id}

@@ -8,6 +8,8 @@
 
   let url = ''
   let previewRequest = 0
+  let loading = false
+  let loadError = false
   $: mime = file?.mime_type || ''
   $: isImage = mime.startsWith('image/')
   $: isVideo = mime.startsWith('video/')
@@ -20,6 +22,8 @@
 
   async function loadPreview(currentFile) {
     const request = ++previewRequest
+    loading = true
+    loadError = false
     if (url) URL.revokeObjectURL(url)
     url = ''
     textContent = ''
@@ -28,10 +32,15 @@
       if (!res.ok) throw new Error('preview failed')
       const blob = await res.blob()
       if (request !== previewRequest) return
+      url = URL.createObjectURL(blob)
       if (isText) textContent = await blob.text()
-      else url = URL.createObjectURL(blob)
+      loading = false
     } catch {
-      if (request === previewRequest && isText) textContent = 'Could not load file.'
+      if (request === previewRequest) {
+        loading = false
+        loadError = true
+        if (isText) textContent = 'Could not load file.'
+      }
     }
   }
 
@@ -55,7 +64,11 @@
         </div>
       </div>
       <div class="modal-body">
-        {#if isImage}
+        {#if loading}
+          <div class="preview-state"><span class="spinner"></span><p>Loading preview...</p></div>
+        {:else if loadError}
+          <div class="preview-state"><Icon name="warning" size={32} /><p>Preview could not be loaded.</p></div>
+        {:else if isImage}
           <img src={url} alt={file.name} />
         {:else if isVideo}
           <video controls src={url}><track kind="captions" /></video>
@@ -115,4 +128,7 @@
   pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; color: var(--text2); font-family: monospace; width: 100%; max-height: 75vh; overflow: auto; }
   .unsupported { text-align: center; color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 1rem; }
   .unsupported p { font-size: 0.875rem; }
+  .preview-state { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; color: var(--text2); }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

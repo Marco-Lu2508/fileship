@@ -1,6 +1,7 @@
 <script>
   import { apiFetch } from '../stores/auth.js'
   import { success, error } from '../stores/toast.js'
+  import Icon from './Icon.svelte'
 
   export let file = null
   export let onClose = () => {}
@@ -66,13 +67,13 @@
     <div class="editor-modal">
       <div class="editor-header">
         <div class="file-info">
-          <span class="filename">✏️ {file.name}</span>
+          <span class="filename"><Icon name="edit" size={14} /> {file.name}</span>
           {#if isDirty}<span class="dirty">●</span>{/if}
         </div>
         <div class="editor-actions">
           <span class="meta">{lineCount} lines</span>
           <button onclick={save} disabled={saving || !isDirty} class="save-btn">
-            {saving ? 'Saving…' : '💾 Save (Ctrl+S)'}
+            {saving ? 'Saving…' : 'Save (Ctrl+S)'}
           </button>
           <button class="close" onclick={handleClose}>✕</button>
         </div>

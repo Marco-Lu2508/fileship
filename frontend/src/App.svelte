@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { user, fetchMe, refreshTokens } from './stores/auth.js'
-  import { theme } from './stores/theme.js'
+  import { theme, applyTheme } from './stores/theme.js'
   import Login from './components/Login.svelte'
   import Browser from './components/Browser.svelte'
   import Admin from './components/Admin.svelte'
@@ -9,12 +9,15 @@
   let ready = false
 
   onMount(async () => {
+    applyTheme($theme)
     if (localStorage.getItem('access_token')) {
       await fetchMe()
       if (!$user) await refreshTokens().then(fetchMe)
     }
     ready = true
   })
+
+  $: applyTheme($theme)
 
   $: route = location.pathname
 </script>
