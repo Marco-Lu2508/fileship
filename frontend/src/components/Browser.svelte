@@ -31,6 +31,7 @@
   let showThemePicker = false
   let searchTimeout  = null
   let dragOverPath   = null
+  let viewMode       = localStorage.getItem('fileship_view') || 'list'
 
   onMount(() => {
     loadFiles('')
@@ -108,6 +109,11 @@
     sortKey = key
   }
 
+  function setView(mode) {
+    viewMode = mode
+    localStorage.setItem('fileship_view', mode)
+  }
+
   function onSearch() {
     clearTimeout(searchTimeout)
     if (!searchQuery.trim()) { searchResults = null; return }
@@ -182,6 +188,14 @@
           <input class="search" placeholder="Search..." bind:value={searchQuery} oninput={onSearch} aria-label="Search files" />
         </div>
         <div class="actions">
+          <div class="view-toggle" aria-label="View mode">
+            <button class:active={viewMode === 'list'} class="icon-btn" onclick={() => setView('list')} title="List view">
+              <Icon name="list" size={15} />
+            </button>
+            <button class:active={viewMode === 'grid'} class="icon-btn" onclick={() => setView('grid')} title="Grid view">
+              <Icon name="grid" size={15} />
+            </button>
+          </div>
           {#if $selected.size > 0}
             <button class="btn" onclick={downloadSelected} title="Download as ZIP"><Icon name="download" size={14} /><span>ZIP ({$selected.size})</span></button>
             <button class="btn danger" onclick={deleteSelected}><Icon name="trash" size={14} /><span>Delete ({$selected.size})</span></button>
@@ -208,7 +222,7 @@
     <Dropzone />
 
     <!-- File Table -->
-    <div class="table-wrap">
+    <div class="table-wrap" class:grid-view={viewMode === 'grid'}>
       {#if $loading || searchLoading}
         <Skeleton rows={12} />
       {:else if sorted.length === 0}
@@ -351,6 +365,9 @@
   }
   .search:focus { outline: none; border-color: var(--accent); }
   .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .view-toggle { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
+  .view-toggle .icon-btn { border-radius: 0; padding: 0.5rem; }
+  .view-toggle .icon-btn.active { background: var(--row-hover); color: var(--accent); }
   .btn {
     display: flex; align-items: center; gap: 0.35rem;
     background: var(--surface); border: 1px solid var(--border);
@@ -398,6 +415,18 @@
     display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
   }
   .empty p { font-size: 0.875rem; }
+
+  :global(.grid-view table) { display: block; }
+  :global(.grid-view thead) { display: none; }
+  :global(.grid-view tbody) { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; padding: 1rem; background: var(--surface2); }
+  :global(.grid-view tr) { display: flex; flex-direction: column; min-height: 150px; padding: 0.9rem; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 1px 2px rgba(31,45,61,0.04); }
+  :global(.grid-view tr:hover) { border-color: var(--accent); box-shadow: var(--shadow); }
+  :global(.grid-view td) { padding: 0; }
+  :global(.grid-view .col-check) { order: 3; margin-top: auto; }
+  :global(.grid-view .col-name) { min-height: 3.3rem; align-items: flex-start; padding: 0.3rem 0; }
+  :global(.grid-view .file-icon) { width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 8px; background: var(--row-hover); }
+  :global(.grid-view .col-size), :global(.grid-view .col-date) { padding-top: 0.25rem; }
+  :global(.grid-view .col-actions) { justify-content: flex-end; border-top: 1px solid var(--border); margin-top: 0.6rem; padding-top: 0.45rem; }
 
   @media (max-width: 640px) {
     .sidebar { display: none; }
