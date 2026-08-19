@@ -37,6 +37,29 @@ Open **http://localhost:8080** and login with your configured credentials.
 
 ---
 
+## Docker Compose
+
+```yaml
+services:
+  fileship:
+    image: ghcr.io/marco-lu2508/fileship:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - fileship-data:/data
+      - fileship-db:/app
+    environment:
+      - ADMIN_PASSWORD=your-secure-password
+      - JWT_SECRET=your-random-secret-min-32-chars
+    restart: unless-stopped
+
+volumes:
+  fileship-data:
+  fileship-db:
+```
+
+---
+
 ## Configuration
 
 Edit `.env` before starting:
