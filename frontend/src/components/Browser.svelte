@@ -134,7 +134,8 @@
 
   function onSearch() {
     clearTimeout(searchTimeout)
-    if (!searchQuery.trim()) { searchResults = null; return }
+    searchResults = null
+    if (!searchQuery.trim()) { searchLoading = false; return }
     searchLoading = true
     searchTimeout = setTimeout(async () => {
       const res = await apiFetch(`/api/files/search?q=${encodeURIComponent(searchQuery)}`)
@@ -143,7 +144,8 @@
     }, 350)
   }
 
-  $: displayFiles = searchResults !== null ? searchResults : ($files?.files || [])
+  $: localMatches = ($files?.files || []).filter(file => file.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+  $: displayFiles = searchResults !== null ? searchResults : (searchQuery.trim() ? localMatches : ($files?.files || []))
   $: sorted = [...displayFiles].sort((a, b) => {
     if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1
     let av = a[sortKey], bv = b[sortKey]
@@ -435,7 +437,8 @@
     border-bottom: 1px solid var(--border);
     white-space: nowrap; user-select: none;
   }
-  th.sortable { cursor: pointer; display: flex; align-items: center; gap: 0.3rem; }
+  th.sortable { cursor: pointer; }
+  th.sortable :global(svg) { vertical-align: -2px; margin-left: 0.25rem; }
   th.sortable:hover { color: var(--text); }
   th.col-check { width: 2rem; }
   .empty {

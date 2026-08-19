@@ -11,11 +11,12 @@
   let loading = false
   let loadError = false
   $: mime = file?.mime_type || ''
-  $: isImage = mime.startsWith('image/')
-  $: isVideo = mime.startsWith('video/')
-  $: isAudio = mime.startsWith('audio/')
-  $: isPdf   = mime.includes('pdf')
-  $: isText  = mime.startsWith('text/')
+  $: extension = file?.name?.split('.').pop()?.toLowerCase() || ''
+  $: isImage = mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(extension)
+  $: isVideo = mime.startsWith('video/') || ['mp4', 'webm', 'ogv', 'mov', 'm4v'].includes(extension)
+  $: isAudio = mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'flac'].includes(extension)
+  $: isPdf   = mime.includes('pdf') || extension === 'pdf'
+  $: isText  = mime.startsWith('text/') || ['txt', 'md', 'json', 'yaml', 'yml', 'csv', 'log', 'xml', 'html', 'css', 'js', 'ts', 'go', 'py', 'sh'].includes(extension)
 
   let textContent = ''
   $: previewUrl = file ? `/api/files/preview?path=${encodeURIComponent(file.path)}&access_token=${encodeURIComponent(localStorage.getItem('access_token') || '')}` : ''
