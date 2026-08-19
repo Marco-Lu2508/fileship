@@ -15,6 +15,8 @@
   let userFilter = ''
   let usersLoading = true
   let statsLoading = true
+  let usersError = ''
+  let statsError = ''
 
   onMount(() => {
     loadUsers()
@@ -23,9 +25,13 @@
 
   async function loadUsers() {
     usersLoading = true
-    const res = await apiFetch('/api/users')
-    if (res.ok) users = await res.json() ?? []
-    usersLoading = false
+    usersError = ''
+    try {
+      const res = await apiFetch('/api/users')
+      if (res.ok) users = await res.json() ?? []
+      else usersError = `Could not load users (HTTP ${res.status}).`
+    } catch { usersError = 'Could not reach the server.' }
+    finally { usersLoading = false }
   }
 
   async function loadAudit() {
@@ -35,9 +41,13 @@
 
   async function loadStats() {
     statsLoading = true
-    const res = await apiFetch('/api/stats')
-    if (res.ok) stats = await res.json()
-    statsLoading = false
+    statsError = ''
+    try {
+      const res = await apiFetch('/api/stats')
+      if (res.ok) stats = await res.json()
+      else statsError = `Could not load statistics (HTTP ${res.status}).`
+    } catch { statsError = 'Could not reach the server.' }
+    finally { statsLoading = false }
   }
 
   async function refreshAll() {
@@ -150,6 +160,8 @@
         <div class="card-heading"><div><h3>Users <span class="count">{filteredUsers.length}</span></h3><p class="muted">Manage access, storage limits and permissions.</p></div><label class="user-search"><Icon name="search" size={14} /><input placeholder="Filter users" bind:value={userFilter} /></label></div>
         {#if usersLoading}
           <div class="loading-state"><span class="spinner"></span>Loading users...</div>
+        {:else if usersError}
+          <div class="empty-state"><Icon name="warning" size={24} /><p>{usersError}</p><button class="retry" onclick={loadUsers}>Retry</button></div>
         {:else if filteredUsers.length === 0}
           <div class="empty-state"><Icon name="users" size={24} /><p>No users match this filter.</p></div>
         {:else}
@@ -207,7 +219,9 @@
 
     <!-- STATS TAB -->
     {:else if tab === 'stats'}
-      {#if stats}
+      {#if statsError}
+        <div class="empty-state"><Icon name="warning" size={24} /><p>{statsError}</p><button class="retry" onclick={loadStats}>Retry</button></div>
+      {:else if stats}
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-value">{stats.user_count}</div>

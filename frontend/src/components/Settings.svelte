@@ -14,18 +14,24 @@
   let saving = false
   let settingsLoading = true
   let settingsError = false
+  let settingsErrorMessage = ''
 
   onMount(loadSettings)
 
   async function loadSettings() {
     settingsLoading = true
     settingsError = false
+    settingsErrorMessage = ''
     try {
       const res = await apiFetch('/api/me/settings')
       if (res.ok) settings = await res.json()
-      else settingsError = true
+      else {
+        settingsError = true
+        settingsErrorMessage = res.status === 401 ? 'Your session has expired. Sign in again.' : `Server returned ${res.status}.`
+      }
     } catch {
       settingsError = true
+      settingsErrorMessage = 'The server could not be reached.'
     }
     settingsLoading = false
   }
@@ -88,7 +94,7 @@
         {#if settingsLoading}
           <div class="loading-row"><span class="spinner"></span><p class="muted">Loading storage details...</p></div>
         {:else if settingsError}
-          <div class="error-row"><Icon name="warning" size={15} /><span>Could not load storage details.</span><button class="retry" onclick={loadSettings}>Retry</button></div>
+          <div class="error-row"><Icon name="warning" size={15} /><div><strong>Could not load storage details.</strong><span>{settingsErrorMessage}</span></div><button class="retry" onclick={loadSettings}>Retry</button></div>
         {:else if settings}
           <div class="info-row">
             <span>Used</span>
