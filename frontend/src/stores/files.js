@@ -5,14 +5,23 @@ export const files = writable([])
 export const currentPath = writable('')
 export const loading = writable(false)
 export const selected = writable(new Set())
+let listController = null
 
 export async function loadFiles(path = '') {
+  listController?.abort()
+  const controller = new AbortController()
+  listController = controller
   loading.set(true)
   currentPath.set(path)
   selected.set(new Set())
-  const res = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`)
-  if (res.ok) files.set(await res.json())
-  loading.set(false)
+  try {
+    const res = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`, { signal: controller.signal })
+    if (res.ok) files.set(await res.json())
+  } catch (error) {
+    if (error.name !== 'AbortError') throw error
+  } finally {
+    if (!controller.signal.aborted) loading.set(false)
+  }
 }
 
 export async function mkdir(path) {

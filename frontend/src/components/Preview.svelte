@@ -82,7 +82,9 @@
         {:else if isImage}
           <img src={url} alt={file.name} onload={() => loading = false} onerror={() => loadError = true} />
         {:else if isVideo}
-          <video controls src={previewUrl} oncanplay={() => loading = false} onerror={() => loadError = true}><track kind="captions" /></video>
+          <div class="video-stage">
+            <video controls playsinline preload="metadata" src={previewUrl} oncanplay={() => loading = false} onerror={() => loadError = true}><track kind="captions" /></video>
+          </div>
         {:else if isAudio}
           <audio controls src={previewUrl} oncanplay={() => loading = false} onerror={() => loadError = true}></audio>
         {:else if isPdf}
@@ -133,7 +135,8 @@
   .close-btn:hover { background: var(--border); color: var(--text); }
   .modal-body { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 1rem; min-height: 200px; }
   img { max-width: 100%; max-height: 75vh; object-fit: contain; }
-  video { max-width: 100%; max-height: 75vh; }
+  .video-stage { width: min(100%, 860px); aspect-ratio: 16 / 9; display: grid; place-items: center; background: #080b10; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #080b10; }
   audio { width: 100%; }
   iframe { width: 100%; height: 75vh; border: none; }
   pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; color: var(--text2); font-family: monospace; width: 100%; max-height: 75vh; overflow: auto; }
