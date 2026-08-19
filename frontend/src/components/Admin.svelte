@@ -12,6 +12,9 @@
   let form = { username: '', password: '', is_admin: false, root_path: '/' }
   let quotaForm = {}
   let editingQuota = null
+  let userFilter = ''
+  let usersLoading = true
+  let statsLoading = true
 
   onMount(() => {
     loadUsers()
@@ -19,8 +22,10 @@
   })
 
   async function loadUsers() {
+    usersLoading = true
     const res = await apiFetch('/api/users')
     if (res.ok) users = await res.json() ?? []
+    usersLoading = false
   }
 
   async function loadAudit() {
@@ -29,8 +34,16 @@
   }
 
   async function loadStats() {
+    statsLoading = true
     const res = await apiFetch('/api/stats')
     if (res.ok) stats = await res.json()
+    statsLoading = false
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadUsers(), loadStats()])
+    if (tab === 'audit') await loadAudit()
+    success('Admin data refreshed')
   }
 
   async function createUser() {
@@ -85,12 +98,16 @@
   }
 
   $: if (tab === 'audit' && audit.length === 0) loadAudit()
+  $: filteredUsers = users.filter(u => u.username.toLowerCase().includes(userFilter.toLowerCase()) || u.root_path.toLowerCase().includes(userFilter.toLowerCase()))
 </script>
 
 <div class="admin">
   <div class="admin-header">
     <span class="brand"><Icon name="folder" size={18} /> Fileship <span class="badge">Admin</span></span>
-    <a href="/" class="back"><Icon name="chevron_r" size={14} /> Back to Files</a>
+    <div class="header-actions">
+      <button class="refresh" onclick={refreshAll}><Icon name="refresh" size={15} /> Refresh</button>
+      <a href="/" class="back"><Icon name="chevron_r" size={14} /> Back to Files</a>
+    </div>
   </div>
 
   <nav class="tabs">
@@ -103,8 +120,15 @@
 
     <!-- USERS TAB -->
     {#if tab === 'users'}
+      {#if stats}
+        <div class="overview-grid">
+          <div class="overview-card"><span class="overview-icon"><Icon name="users" size={18} /></span><div><strong>{stats.user_count}</strong><span>Users</span></div></div>
+          <div class="overview-card"><span class="overview-icon storage"><Icon name="save" size={18} /></span><div><strong>{formatBytes(stats.disk_usage)}</strong><span>Storage used</span></div></div>
+          <div class="overview-card"><span class="overview-icon activity"><Icon name="activity" size={18} /></span><div><strong>{audit.length || '—'}</strong><span>Recent events</span></div></div>
+        </div>
+      {/if}
       <div class="card">
-        <h3>Add User</h3>
+        <div class="card-heading"><div><h3>Add user</h3><p class="muted">Create an account and assign its home directory.</p></div></div>
         <div class="form-row">
           <input placeholder="Username" minlength="2" bind:value={form.username} />
           <input type="password" placeholder="Password" bind:value={form.password} />
@@ -115,7 +139,12 @@
       </div>
 
       <div class="card">
-        <h3>Users ({users.length})</h3>
+        <div class="card-heading"><div><h3>Users <span class="count">{filteredUsers.length}</span></h3><p class="muted">Manage access, storage limits and permissions.</p></div><label class="user-search"><Icon name="search" size={14} /><input placeholder="Filter users" bind:value={userFilter} /></label></div>
+        {#if usersLoading}
+          <div class="loading-state"><span class="spinner"></span>Loading users...</div>
+        {:else if filteredUsers.length === 0}
+          <div class="empty-state"><Icon name="users" size={24} /><p>No users match this filter.</p></div>
+        {:else}
         <table>
           <thead>
             <tr>
@@ -129,7 +158,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each users as u (u.id)}
+            {#each filteredUsers as u (u.id)}
               <tr>
                 <td>{u.username}</td>
                 <td class="mono">{u.root_path}</td>
@@ -165,6 +194,7 @@
             {/each}
           </tbody>
         </table>
+        {/if}
       </div>
 
     <!-- STATS TAB -->
@@ -242,12 +272,32 @@
   .brand { display: inline-flex; align-items: center; gap: 0.55rem; font-size: 1.2rem; font-weight: 700; }
   .badge { background: var(--row-hover); color: var(--accent); font-size: 0.7rem; padding: 0.25rem 0.55rem; border-radius: 999px; margin-left: 0.35rem; vertical-align: middle; }
   .back { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); text-decoration: none; font-size: 0.85rem; }
+  .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .refresh { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 0.45rem 0.7rem; }
+  .refresh:hover { background: var(--row-hover); }
   .tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); padding: 0 clamp(1rem, 4vw, 3rem); background: var(--surface); }
   .tabs button { display: inline-flex; align-items: center; gap: 0.45rem; background: none; border: none; color: var(--text2); padding: 0.85rem 1rem; cursor: pointer; font-size: 0.85rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
   .tabs button:hover { color: var(--text); }
   .tab-content { width: min(100%, 1440px); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem); display: flex; flex-direction: column; gap: 1.25rem; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; box-shadow: var(--shadow); overflow-x: auto; }
+  .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+  .card-heading h3 { margin-bottom: 0.25rem; }
+  .count { color: var(--accent); font-weight: 500; }
+  .user-search { display: flex; align-items: center; gap: 0.45rem; border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.55rem; color: var(--text2); }
+  .user-search input { border: 0; padding: 0.25rem; width: 170px; background: transparent; }
+  .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .overview-card { display: flex; align-items: center; gap: 0.8rem; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+  .overview-card > div { display: flex; flex-direction: column; gap: 0.15rem; }
+  .overview-card strong { font-size: 1.2rem; }
+  .overview-card span:last-child { color: var(--text2); font-size: 0.78rem; }
+  .overview-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: var(--row-hover); }
+  .overview-icon.storage { color: var(--success); }
+  .overview-icon.activity { color: #c58b36; }
+  .loading-state, .empty-state { display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 3rem 1rem; color: var(--text2); }
+  .empty-state { flex-direction: column; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   h3 { margin: 0 0 1rem; font-size: 0.95rem; color: var(--text); }
   .form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
   input:not([type="checkbox"]) { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
@@ -283,5 +333,5 @@
   .mono { font-family: monospace; }
   .small { font-size: 0.8rem; }
   .muted { color: var(--text2); font-size: 0.9rem; }
-  @media (max-width: 700px) { .admin-header { align-items: flex-start; gap: 0.75rem; flex-direction: column; } .tabs { overflow-x: auto; } .form-row { align-items: stretch; flex-direction: column; } .form-row input, .form-row button { width: 100%; } .user-usage { align-items: flex-start; flex-direction: column; gap: 0.35rem; } .user-name { width: auto; } .usage-bar-wrap { width: 100%; } }
+  @media (max-width: 700px) { .admin-header { align-items: flex-start; gap: 0.75rem; flex-direction: column; } .header-actions { width: 100%; justify-content: space-between; } .tabs { overflow-x: auto; } .form-row { align-items: stretch; flex-direction: column; } .form-row input, .form-row button { width: 100%; } .user-usage { align-items: flex-start; flex-direction: column; gap: 0.35rem; } .user-name { width: auto; } .usage-bar-wrap { width: 100%; } .overview-grid { grid-template-columns: 1fr; } .card-heading { align-items: stretch; flex-direction: column; } .user-search input { width: 100%; } }
 </style>

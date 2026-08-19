@@ -12,11 +12,19 @@
   let newPassword = ''
   let newPassword2 = ''
   let saving = false
+  let settingsLoading = true
+  let settingsError = false
 
-  onMount(async () => {
+  onMount(loadSettings)
+
+  async function loadSettings() {
+    settingsLoading = true
+    settingsError = false
     const res = await apiFetch('/api/me/settings')
     if (res.ok) settings = await res.json()
-  })
+    else settingsError = true
+    settingsLoading = false
+  }
 
   async function changePassword() {
     if (newPassword !== newPassword2) { error('Passwords do not match'); return }
@@ -65,7 +73,11 @@
       <!-- Storage -->
       <section>
         <h3><Icon name="save" size={15} /> Storage</h3>
-        {#if settings}
+        {#if settingsLoading}
+          <div class="loading-row"><span class="spinner"></span><p class="muted">Loading storage details...</p></div>
+        {:else if settingsError}
+          <div class="error-row"><Icon name="warning" size={15} /><span>Could not load storage details.</span><button class="retry" onclick={loadSettings}>Retry</button></div>
+        {:else if settings}
           <div class="info-row">
             <span>Used</span>
             <span>{formatBytes(settings.disk_usage)}</span>
@@ -86,8 +98,6 @@
               <span class="mono">{settings.allowed_types}</span>
             </div>
           {/if}
-        {:else}
-          <div class="loading-row"><span class="spinner"></span><p class="muted">Loading storage details...</p></div>
         {/if}
       </section>
 
@@ -159,6 +169,8 @@
   .small { font-size: 0.8rem; }
   .mono { font-family: monospace; font-size: 0.85rem; }
   .loading-row { display: flex; align-items: center; gap: 0.6rem; }
+  .error-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; color: var(--danger); font-size: 0.85rem; }
+  .retry { margin-left: auto; padding: 0.35rem 0.6rem; background: var(--surface); color: var(--accent); border: 1px solid var(--border); }
   .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>

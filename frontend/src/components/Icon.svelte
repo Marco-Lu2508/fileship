@@ -50,6 +50,8 @@
     grid:        'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
     globe:       'M12 22a10 10 0 100-20 10 10 0 000 20z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20',
     lock:        'M5 11h14v10H5z M8 11V7a4 4 0 018 0v4',
+    refresh:     'M20 11a8 8 0 00-14.9-4 M5 3v4h4 M4 13a8 8 0 0014.9 4 M19 21v-4h-4',
+    activity:    'M3 12h4l3-8 4 16 3-8h4',
   }
 </script>
 
