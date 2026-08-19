@@ -64,14 +64,22 @@
 <div class="overlay" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onClose() }} onkeydown={handleKey}>
   <div class="settings-modal">
     <div class="settings-header">
-      <span><Icon name="settings" size={15} /> Settings</span>
+      <div class="settings-title"><span class="settings-mark"><Icon name="settings" size={17} /></span><div><strong>Settings</strong><small>Manage your Fileship workspace</small></div></div>
       <button class="close" onclick={onClose} title="Close"><Icon name="x" size={15} /></button>
     </div>
 
-    <div class="settings-body">
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="Settings sections">
+        <a href="#storage" class="active"><Icon name="save" size={15} /> Storage</a>
+        <a href="#webdav"><Icon name="webdav" size={15} /> Connections</a>
+        <a href="#language"><Icon name="globe" size={15} /> Preferences</a>
+        <a href="#password"><Icon name="lock" size={15} /> Security</a>
+      </nav>
+
+      <div class="settings-body">
 
       <!-- Storage -->
-      <section>
+      <section id="storage">
         <h3><Icon name="save" size={15} /> Storage</h3>
         {#if settingsLoading}
           <div class="loading-row"><span class="spinner"></span><p class="muted">Loading storage details...</p></div>
@@ -102,7 +110,7 @@
       </section>
 
       <!-- WebDAV -->
-      <section>
+      <section id="webdav">
         <h3><Icon name="webdav" size={15} /> WebDAV</h3>
         <p class="muted">Connect with Finder, Windows Explorer, Cyberduck or any WebDAV client:</p>
         <div class="webdav-url">
@@ -113,7 +121,7 @@
       </section>
 
       <!-- Language -->
-      <section>
+      <section id="language">
         <h3><Icon name="globe" size={15} /> Language</h3>
         <select bind:value={$locale}>
           <option value="en">English</option>
@@ -122,7 +130,7 @@
       </section>
 
       <!-- Password -->
-      <section>
+      <section id="password">
         <h3><Icon name="lock" size={15} /> Change Password</h3>
         <div class="form">
           <input type="password" placeholder="Current password" bind:value={oldPassword} />
@@ -134,19 +142,29 @@
         </div>
       </section>
 
+      </div>
     </div>
   </div>
 </div>
 
 <style>
   .overlay { position: fixed; inset: 0; background: rgba(8, 15, 25, 0.72); display: flex; align-items: center; justify-content: center; z-index: 800; padding: 1rem; }
-  .settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 560px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow); }
-  .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); font-size: 1rem; font-weight: 600; color: var(--text); }
-  .settings-header > span, h3 { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; width: min(100%, 820px); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow); }
+  .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 1.15rem 1.35rem; border-bottom: 1px solid var(--border); color: var(--text); }
+  .settings-title { display: flex; align-items: center; gap: 0.7rem; }
+  .settings-title > div { display: flex; flex-direction: column; gap: 0.15rem; }
+  .settings-title strong { font-size: 1rem; }
+  .settings-title small { color: var(--text2); font-size: 0.75rem; font-weight: 400; }
+  .settings-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: var(--accent); background: var(--row-hover); }
+  h3 { display: inline-flex; align-items: center; gap: 0.45rem; }
   .close { display: flex; background: none; border: none; color: var(--text2); cursor: pointer; padding: 0.35rem; border-radius: 5px; }
   .close:hover { color: var(--text); background: var(--row-hover); }
+  .settings-layout { display: grid; grid-template-columns: 180px 1fr; min-height: 0; overflow: hidden; }
+  .settings-nav { padding: 1rem 0.7rem; border-right: 1px solid var(--border); background: var(--surface2); }
+  .settings-nav a { display: flex; align-items: center; gap: 0.55rem; padding: 0.65rem 0.7rem; margin-bottom: 0.2rem; border-radius: 7px; color: var(--text2); font-size: 0.82rem; text-decoration: none; }
+  .settings-nav a:hover, .settings-nav a.active { background: var(--row-hover); color: var(--accent); }
   .settings-body { overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
-  section { display: flex; flex-direction: column; gap: 0.6rem; padding: 1rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface2); }
+  section { scroll-margin-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem; padding: 1.1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); }
   h3 { font-size: 0.9rem; font-weight: 600; color: var(--text); margin: 0; }
   .info-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text2); }
   .info-row span:last-child { color: var(--text); }
@@ -173,4 +191,5 @@
   .retry { margin-left: auto; padding: 0.35rem 0.6rem; background: var(--surface); color: var(--accent); border: 1px solid var(--border); }
   .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 620px) { .settings-layout { display: block; overflow: auto; } .settings-nav { display: flex; gap: 0.25rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 0.6rem; } .settings-nav a { white-space: nowrap; margin: 0; } .settings-body { overflow: visible; padding: 0.8rem; } .settings-title small { display: none; } }
 </style>

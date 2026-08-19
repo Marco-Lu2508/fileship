@@ -103,7 +103,7 @@
 
 <div class="admin">
   <div class="admin-header">
-    <span class="brand"><Icon name="folder" size={18} /> Fileship <span class="badge">Admin</span></span>
+    <div class="brand"><span class="brand-mark"><Icon name="folder" size={18} /></span><div><strong>Fileship</strong><small>Administration console</small></div><span class="badge">Admin</span></div>
     <div class="header-actions">
       <button class="refresh" onclick={refreshAll}><Icon name="refresh" size={15} /> Refresh</button>
       <a href="/" class="back"><Icon name="chevron_r" size={14} /> Back to Files</a>
@@ -115,6 +115,11 @@
     <button class:active={tab==='stats'} onclick={() => tab='stats'}><Icon name="bar_chart" size={15} /> Stats</button>
     <button class:active={tab==='audit'} onclick={() => tab='audit'}><Icon name="clipboard" size={15} /> Audit Log</button>
   </nav>
+
+  <div class="admin-intro">
+    <div><p class="eyebrow">Workspace control</p><h1>Administration</h1><p>Manage people, storage and activity across your Fileship instance.</p></div>
+    <span class="instance-status"><i></i> Instance online</span>
+  </div>
 
   <div class="tab-content">
 
@@ -269,7 +274,11 @@
 <style>
   .admin { min-height: 100vh; background: var(--bg); color: var(--text); }
   .admin-header { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem clamp(1rem, 4vw, 3rem); background: var(--surface); border-bottom: 1px solid var(--border); }
-  .brand { display: inline-flex; align-items: center; gap: 0.55rem; font-size: 1.2rem; font-weight: 700; }
+  .brand { display: inline-flex; align-items: center; gap: 0.65rem; }
+  .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #fff; }
+  .brand > div { display: flex; flex-direction: column; gap: 0.1rem; }
+  .brand strong { font-size: 1rem; }
+  .brand small { color: var(--text2); font-size: 0.7rem; font-weight: 400; }
   .badge { background: var(--row-hover); color: var(--accent); font-size: 0.7rem; padding: 0.25rem 0.55rem; border-radius: 999px; margin-left: 0.35rem; vertical-align: middle; }
   .back { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); text-decoration: none; font-size: 0.85rem; }
   .header-actions { display: flex; align-items: center; gap: 0.75rem; }
@@ -279,6 +288,12 @@
   .tabs button { display: inline-flex; align-items: center; gap: 0.45rem; background: none; border: none; color: var(--text2); padding: 0.85rem 1rem; cursor: pointer; font-size: 0.85rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
   .tabs button:hover { color: var(--text); }
+  .admin-intro { width: min(100%, 1440px); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 0; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
+  .admin-intro h1 { margin: 0.2rem 0 0.3rem; font-size: 1.65rem; letter-spacing: -0.03em; }
+  .admin-intro p:not(.eyebrow) { color: var(--text2); font-size: 0.85rem; }
+  .eyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .instance-status { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.65rem; border: 1px solid var(--border); border-radius: 999px; color: var(--text2); font-size: 0.75rem; }
+  .instance-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent); }
   .tab-content { width: min(100%, 1440px); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem); display: flex; flex-direction: column; gap: 1.25rem; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; box-shadow: var(--shadow); overflow-x: auto; }
   .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
