@@ -34,28 +34,28 @@
 
 <style>
   /* ── Dark (default) ─────────────────────────────── */
-  :global(:root),
-  :global([data-theme="dark"]) {
-    --bg:          #f4f6f8;
-    --bg2:         #e9edf2;
-    --surface:     #ffffff;
-    --surface2:    #f8fafc;
-    --border:      #d9e0e7;
-    --text:        #243447;
-    --text2:       #718096;
-    --accent:      #1976d2;
-    --accent-h:    #125ca8;
-    --danger:      #d64545;
-    --danger-bg:   #fff1f1;
-    --success:     #2f8f5b;
-    --skel:        #e3e9ef;
-    --input-bg:    #ffffff;
-    --header-bg:   #ffffff;
-    --row-hover:   #f1f6fb;
-    --shadow:      0 1px 2px rgba(31, 45, 61, 0.08), 0 8px 24px rgba(31, 45, 61, 0.04);
+  :global(html),
+  :global(html[data-theme="dark"]) {
+    --bg:          #111827;
+    --bg2:         #172235;
+    --surface:     #1d2a3d;
+    --surface2:    #162235;
+    --border:      #304158;
+    --text:        #edf2f7;
+    --text2:       #9aabc0;
+    --accent:      #5ca7ff;
+    --accent-h:    #388be8;
+    --danger:      #f27777;
+    --danger-bg:   #3a2328;
+    --success:     #65c58a;
+    --skel:        #2a3a51;
+    --input-bg:    #152238;
+    --header-bg:   #172235;
+    --row-hover:   #263951;
+    --shadow:      0 1px 2px rgba(0,0,0,0.3), 0 12px 28px rgba(0,0,0,0.18);
   }
   /* ── Light ──────────────────────────────────────── */
-  :global([data-theme="light"]) {
+  :global(html[data-theme="light"]) {
     --bg:          #f5f5f5;
     --bg2:         #ebebeb;
     --surface:     #ffffff;
@@ -76,7 +76,7 @@
   }
 
   /* ── Nord ───────────────────────────────────────── */
-  :global([data-theme="nord"]) {
+  :global(html[data-theme="nord"]) {
     --bg:          #2e3440;
     --bg2:         #272c36;
     --surface:     #3b4252;
@@ -97,7 +97,7 @@
   }
 
   /* ── Solarized Dark ─────────────────────────────── */
-  :global([data-theme="solarized"]) {
+  :global(html[data-theme="solarized"]) {
     --bg:          #002b36;
     --bg2:         #00212b;
     --surface:     #073642;
@@ -118,7 +118,7 @@
   }
 
   /* ── Gruvbox ────────────────────────────────────── */
-  :global([data-theme="gruvbox"]) {
+  :global(html[data-theme="gruvbox"]) {
     --bg:          #282828;
     --bg2:         #1d2021;
     --surface:     #3c3836;

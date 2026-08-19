@@ -34,34 +34,34 @@
   .overlay {
     position: fixed; inset: 0; z-index: 900;
     display: flex; align-items: flex-start; justify-content: flex-end;
-    padding: 3rem 1rem 0;
+    padding: 4.5rem 1rem 0;
   }
   .picker {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; width: 180px; box-shadow: var(--shadow);
+    border-radius: 9px; width: 224px; box-shadow: var(--shadow);
     overflow: hidden;
   }
   .picker-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border);
-    font-size: 0.8rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.8rem 0.9rem; border-bottom: 1px solid var(--border);
+    font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em;
   }
   .picker-header button { background: none; border: none; color: var(--text2); cursor: pointer; display: flex; }
   .theme-list { padding: 0.3rem; }
   .theme-item {
-    display: flex; align-items: center; gap: 0.6rem;
+    display: flex; align-items: center; gap: 0.7rem;
     width: 100%; background: none; border: none; color: var(--text);
-    padding: 0.45rem 0.5rem; border-radius: 3px; cursor: pointer; font-size: 0.875rem;
+    padding: 0.65rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem;
     text-align: left;
   }
   .theme-item:hover { background: var(--row-hover); }
   .theme-item.active { color: var(--accent); }
   .active-mark { margin-left: auto; color: var(--accent); display: flex; }
   .swatch {
-    width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0;
   }
   /* Swatch Farben */
-  .swatch[data-theme="dark"]      { background: #e94560; }
+  .swatch[data-theme="dark"]      { background: #172235; }
   .swatch[data-theme="light"]     { background: #1565c0; }
   .swatch[data-theme="nord"]      { background: #88c0d0; }
   .swatch[data-theme="solarized"] { background: #268bd2; }

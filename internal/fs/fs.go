@@ -233,5 +233,9 @@ func DetectMime(root, rel string) (string, error) {
 	defer f.Close()
 	buf := make([]byte, 512)
 	n, _ := f.Read(buf)
-	return http.DetectContentType(buf[:n]), nil
+	detected := http.DetectContentType(buf[:n])
+	if detected == "application/octet-stream" {
+		return mimeType(rel), nil
+	}
+	return detected, nil
 }
