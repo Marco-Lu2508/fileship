@@ -217,7 +217,7 @@
 <!-- Backdrop für Dropdown-Schließen -->
 {#if showActionPanel}
   <div class="dropdown-backdrop" role="button" tabindex="-1"
-    onclick={() => showActionPanel = false}
+    onmousedown={() => showActionPanel = false}
     onkeydown={(e) => e.key === 'Escape' && (showActionPanel = false)}
     aria-label="Close menu">
   </div>
@@ -303,7 +303,7 @@
     <header class="topbar">
       <!-- Actions-Button + Dropdown -->
       <div class="action-wrap">
-        <button class="action-toggle" onclick={() => showActionPanel = !showActionPanel}
+        <button class="action-toggle" onclick={(e) => { e.stopPropagation(); showActionPanel = !showActionPanel }}
           class:active={showActionPanel} title="Actions">
           <Icon name="plus" size={16} />
           <span>Actions</span>

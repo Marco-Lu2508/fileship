@@ -117,7 +117,20 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := h.userRoot(r)
-	diskUsage, _ := fsvc.DirSize(root)
+
+	// DirSize mit Timeout — nicht blockieren wenn root sehr groß ist
+	sizeCh := make(chan int64, 1)
+	go func() {
+		s, _ := fsvc.DirSize(root)
+		sizeCh <- s
+	}()
+
+	var diskUsage int64
+	select {
+	case diskUsage = <-sizeCh:
+	case <-r.Context().Done():
+		diskUsage = 0
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{

@@ -127,11 +127,21 @@ func Search(root, query string) ([]model.FileInfo, error) {
 	return results, err
 }
 
+// virtualFSPaths sind Linux-Pseudo-Dateisysteme die nicht gewandert werden sollen
+var virtualFSPaths = map[string]bool{
+	"proc": true, "sys": true, "dev": true, "run": true,
+	"tmp": true, "snap": true,
+}
+
 func DirSize(path string) (int64, error) {
 	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return nil // Fehler ignorieren, weitermachen
+		}
+		// Virtuelle Dateisysteme überspringen
+		if info.IsDir() && virtualFSPaths[info.Name()] {
+			return filepath.SkipDir
 		}
 		if !info.IsDir() {
 			size += info.Size()
