@@ -60,14 +60,15 @@
 
   async function deleteUser(id) {
     if (!confirm('Delete this user?')) return
-    await apiFetch(`/api/users/${id}`, { method: 'DELETE' })
+    const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' })
+    if (!res.ok) { error(await res.text()); return }
     success('User deleted')
     await loadUsers()
   }
 
   async function saveQuota(id) {
     const q = quotaForm[id] || {}
-    await apiFetch(`/api/users/${id}/quota`, {
+    const res = await apiFetch(`/api/users/${id}/quota`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -75,17 +76,19 @@
         allowed_types: q.allowed_types || ''
       })
     })
+    if (!res.ok) { error(await res.text()); return }
     success('Quota saved')
     editingQuota = null
     await loadUsers()
   }
 
   async function updateUser(id, patch) {
-    await apiFetch(`/api/users/${id}`, {
+    const res = await apiFetch(`/api/users/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     })
+    if (!res.ok) { error(await res.text()); return }
     success('User updated')
     await loadUsers()
   }

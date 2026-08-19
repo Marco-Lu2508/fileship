@@ -235,6 +235,94 @@ Administrators can open `/admin` and manage:
 
 The account used for the first login is `admin`. Change its password immediately in Settings.
 
+## API
+
+The API is available below the same host as the web interface. JSON endpoints use an access token returned by the login endpoint.
+
+### Login and token use
+
+```bash
+BASE_URL=http://localhost:8080
+
+ACCESS_TOKEN=$(curl -fsS "$BASE_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"your-password"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+curl -fsS "$BASE_URL/api/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Access tokens are short-lived. Store the `refresh_token` returned at login and send it to `/api/auth/refresh` when the access token expires:
+
+```bash
+curl -fsS "$BASE_URL/api/auth/refresh" \
+  -H 'Content-Type: application/json' \
+  -d '{"refresh_token":"your-refresh-token"}'
+```
+
+### File operations
+
+```bash
+# List the current folder
+curl -fsS "$BASE_URL/api/files?path=" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# List a folder with sorting and pagination
+curl -fsS "$BASE_URL/api/files?path=documents&sort_by=name&sort_asc=true&page=1&per_page=100" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Search recursively
+curl -fsS "$BASE_URL/api/files/search?q=report" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Download a file
+curl -fL "$BASE_URL/api/files/download?path=documents/report.pdf" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -o report.pdf
+
+# Create a folder
+curl -fsS "$BASE_URL/api/files/mkdir" \
+  -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"path":"documents/2026"}'
+
+# Upload a file
+curl -fS "$BASE_URL/api/files/upload" \
+  -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -F 'path=documents' -F 'files=@report.pdf'
+```
+
+Mutating browser requests also use the CSRF double-submit token. A script should first make a GET request, read the `csrf_token` cookie, and send the same value in `X-CSRF-Token`.
+
+### Shares and account settings
+
+```bash
+# Create a share link; expires_in_hours may be null for no expiry
+curl -fsS "$BASE_URL/api/shares" \
+  -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "X-CSRF-Token: $CSRF_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"path":"documents/report.pdf","is_dir":false,"expires_in_hours":24}'
+
+# Read storage and account settings
+curl -fsS "$BASE_URL/api/me/settings" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+The public share URL returned by the API is `/s/{token}`. Keep tokens private and use short expiry times for sensitive files.
+
+### Admin endpoints
+
+Admin tokens can call:
+
+- `GET /api/users` and `POST /api/users`
+- `PATCH /api/users/{id}` and `DELETE /api/users/{id}`
+- `PUT /api/users/{id}/quota`
+- `GET /api/stats`
+- `GET /api/audit?limit=200`
+
+All admin endpoints require both a valid access token and administrator claims.
+
 ## Keyboard Shortcuts
 
 In the file workspace:

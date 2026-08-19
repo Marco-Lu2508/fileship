@@ -20,9 +20,13 @@
   async function loadSettings() {
     settingsLoading = true
     settingsError = false
-    const res = await apiFetch('/api/me/settings')
-    if (res.ok) settings = await res.json()
-    else settingsError = true
+    try {
+      const res = await apiFetch('/api/me/settings')
+      if (res.ok) settings = await res.json()
+      else settingsError = true
+    } catch {
+      settingsError = true
+    }
     settingsLoading = false
   }
 

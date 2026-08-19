@@ -62,9 +62,9 @@ function clearTokens() {
   clearTimeout(refreshTimer)
 }
 
-export function apiFetch(url, options = {}) {
+export async function apiFetch(url, options = {}, retry = true) {
   const token = get(accessToken)
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers: {
       ...options.headers,
@@ -72,4 +72,9 @@ export function apiFetch(url, options = {}) {
       ...csrfHeaders()
     }
   })
+  if (res.status === 401 && retry && localStorage.getItem('refresh_token')) {
+    await refreshTokens()
+    if (get(accessToken)) return apiFetch(url, options, false)
+  }
+  return res
 }
