@@ -123,6 +123,9 @@
     renaming = false
     newName = file.name
   }
+
+  // Reaktive Deklarationen — müssen VOR dem Template stehen
+  $: isSelected = $selected.has(file.path)
   $: isImage = file.mime_type?.startsWith('image/')
   $: isText  = file.mime_type?.startsWith('text/') ||
     ['js','ts','json','md','yaml','yml','toml','sh','py','go','rs','css','html','xml','csv','ini','conf','txt','log']
