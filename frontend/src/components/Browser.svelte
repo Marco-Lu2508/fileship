@@ -380,7 +380,7 @@
       ><Icon name="ship" size={29} /><strong>fileship<span>.</span></strong></a
     >
     <div class="workspace-label">
-      <i></i>Personal workspace<span>SELF-HOSTED</span>
+      <i></i>File manager
     </div>
     <nav class="sidebar-nav" aria-label="Main navigation">
       <span class="nav-label">LIBRARY</span>
@@ -422,13 +422,6 @@
           Star a file or folder to keep it close.
         </p>{/each}
     </nav>
-    <div class="sidebar-note">
-      <Icon name="lock" size={17} />
-      <div>
-        <strong>Your files. Your space.</strong>
-        <p>Stored on your own server.</p>
-      </div>
-    </div>
     <div class="sidebar-bottom">
       {#if $user?.is_admin}<a class="nav-item" href="/admin"
           ><Icon name="users" size={18} /><span>Administration</span></a
@@ -492,13 +485,7 @@
     <div class="workspace">
       <section class="page-heading">
         <div>
-          <span class="eyebrow">A LITTLE ORDER. A LOT OF POSSIBILITY.</span>
-          <h1>{title}<span>.</span></h1>
-          <p>
-            {isSearching
-              ? 'Find what you need, anywhere in your workspace.'
-              : 'Everything you need, right where you left it.'}
-          </p>
+          <h1>{title}</h1>
         </div>
         <div class="heading-actions">
           <button class="btn" onclick={() => openCreate('folder')}
@@ -798,9 +785,6 @@
             >{/if}
         </footer>
       </section>
-      <p class="workspace-footer">
-        <Icon name="ship" size={15} />A home for everything you’re working on.
-      </p>
     </div>
   </main>
 </div>
@@ -893,14 +877,6 @@
     background: #b9d99e;
     border-radius: 50%;
   }
-  .workspace-label span {
-    font-size: 8px;
-    letter-spacing: 1px;
-    padding: 3px 5px;
-    border: 1px solid #415647;
-    border-radius: 4px;
-    margin-left: 13px;
-  }
   .sidebar-nav {
     flex: 1;
     overflow-y: auto;
@@ -958,26 +934,6 @@
     line-height: 1.8;
     margin: 0 14px;
     max-width: 170px;
-  }
-  .sidebar-note {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 25px 7px 15px;
-    padding: 14px 10px;
-    border: 1px solid #3f5446;
-    border-radius: 9px;
-    color: #b9d99e;
-  }
-  .sidebar-note strong {
-    font-weight: 500;
-    font-size: 11px;
-    color: #edf3ed;
-  }
-  .sidebar-note p {
-    color: #a1b2a5;
-    font-size: 10px;
-    margin-top: 4px;
   }
   .sidebar-bottom {
     padding-bottom: 15px;
@@ -1042,9 +998,9 @@
     display: flex;
     align-items: center;
     gap: 22px;
-    padding: 20px 40px;
+    padding: 14px 28px;
     border-bottom: 1px solid var(--border);
-    min-height: 81px;
+    min-height: 65px;
     background: var(--surface);
   }
   .search-box {
@@ -1098,35 +1054,22 @@
   .workspace {
     max-width: 1600px;
     margin: 0 auto;
-    padding: 41px 40px 20px;
+    padding: 22px 28px 20px;
   }
   .page-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    margin-bottom: 29px;
-  }
-  .eyebrow {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 1.6px;
-    color: var(--text3);
+    margin-bottom: 16px;
   }
   h1 {
-    font-size: clamp(28px, 3vw, 38px);
+    font-size: clamp(22px, 2vw, 28px);
     line-height: 1.3;
-    letter-spacing: -1.6px;
+    letter-spacing: -0.6px;
     font-weight: 600;
-    margin: 7px 0 9px;
+    margin: 0;
     overflow-wrap: anywhere;
-  }
-  h1 span {
-    color: var(--accent);
-  }
-  .page-heading p {
-    color: var(--text2);
-    font-size: 12px;
   }
   .heading-actions {
     display: flex;
@@ -1179,7 +1122,7 @@
     cursor: default;
   }
   .file-section {
-    margin-top: 29px;
+    margin-top: 20px;
   }
   .file-toolbar {
     display: flex;
@@ -1246,7 +1189,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 0;
+    padding: 12px 0;
     gap: 10px;
     font-size: 11px;
     color: var(--text3);
@@ -1364,7 +1307,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     overflow: auto;
-    max-height: 60vh;
+    max-height: max(240px, calc(100dvh - 330px));
   }
   table {
     width: 100%;
@@ -1463,15 +1406,6 @@
     padding: 3px 6px;
     border: 1px solid var(--border);
     border-radius: 4px;
-  }
-  .workspace-footer {
-    margin: 27px 0 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-size: 10px;
-    color: var(--text3);
   }
   :global(.grid-view table) {
     display: block;
@@ -1634,10 +1568,6 @@
     }
   }
   @media (max-width: 480px) {
-    .eyebrow {
-      font-size: 8px;
-      letter-spacing: 1.2px;
-    }
     .selection-bar {
       gap: 12px;
       padding: 10px;

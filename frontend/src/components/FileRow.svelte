@@ -269,7 +269,7 @@
     background: var(--accent-soft);
   }
   td {
-    padding: 14px 17px;
+    padding: 10px 17px;
     vertical-align: middle;
   }
   .col-check {
@@ -282,8 +282,8 @@
     min-width: 0;
   }
   .file-icon-wrap {
-    width: 36px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
     border-radius: 8px;

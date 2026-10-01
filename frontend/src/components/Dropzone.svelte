@@ -143,12 +143,10 @@
   ondragleave={() => (dragging = false)}
   ondrop={handleDrop}
 >
-  <span class="upload-icon"><Icon name="upload" size={25} /></span>
+  <span class="upload-icon"><Icon name="upload" size={20} /></span>
   <div class="drop-copy">
     <strong
-      >{dragging
-        ? 'Ready when you are. Drop to upload.'
-        : 'Good things deserve a home.'}</strong
+      >{dragging ? 'Drop files to upload' : 'Upload to this folder'}</strong
     >
     <p>
       Drag & drop your files here, or <button onclick={openPicker}
@@ -220,8 +218,8 @@
   .dropzone {
     display: flex;
     align-items: center;
-    gap: 18px;
-    padding: 25px 26px;
+    gap: 12px;
+    padding: 12px 16px;
     border: 1px dashed var(--upload-border);
     border-radius: 10px;
     background: var(--upload-bg);
@@ -236,9 +234,9 @@
   .upload-icon {
     display: grid;
     place-items: center;
-    width: 51px;
-    height: 51px;
-    border-radius: 13px;
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
     background: var(--surface);
     color: var(--accent);
     box-shadow: 0 2px 5px #182c1410;
@@ -337,19 +335,19 @@
   }
   @media (max-width: 600px) {
     .dropzone {
-      padding: 20px 16px;
-      gap: 13px;
+      padding: 12px 14px;
+      gap: 12px;
       flex-wrap: wrap;
     }
     .folder-button {
-      margin: 0 0 0 64px;
+      margin: 0 0 0 50px;
     }
     .upload-icon {
-      width: 44px;
-      height: 44px;
+      width: 38px;
+      height: 38px;
     }
     .drop-copy {
-      flex: 1 1 calc(100% - 65px);
+      flex: 1 1 calc(100% - 50px);
     }
     .drop-copy strong {
       font-size: 12px;
