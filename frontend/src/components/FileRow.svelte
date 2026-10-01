@@ -1,389 +1,474 @@
+<script module>
+  let nextMenuId = 0
+</script>
+
 <script>
-  import { deleteFile, renameFile, loadFiles, currentPath, selected, downloadFile } from '../stores/files.js'
+  import { tick } from 'svelte'
+  import { get } from 'svelte/store'
+  import {
+    renameFile,
+    loadFiles,
+    currentPath,
+    selected,
+    downloadFile
+  } from '../stores/files.js'
   import { success, error } from '../stores/toast.js'
   import { addFavorite, removeFavorite } from '../stores/favorites.js'
-  import { get } from 'svelte/store'
+  import { fileKind, formatBytes, validName } from '../lib/files.js'
   import Icon from './Icon.svelte'
-
   export let file
-  export let rowIndex     = 0
-  export let onPreview    = () => {}
-  export let onShare      = () => {}
-  export let onEdit       = () => {}
-  export let onUnzip      = () => {}
-  export let onNavigate   = (path) => loadFiles(path)
-  export let onDragOver   = () => {}
-  export let onDrop       = () => {}
-  export let dragOverPath = null
+  export let showPath = false
+  export let onPreview = () => {},
+    onShare = () => {},
+    onEdit = () => {},
+    onUnzip = () => {},
+    onDelete = () => {}
+  export let onNavigate = (path) => loadFiles(path),
+    onDragOver = () => {},
+    onDrop = () => {},
+    dragOverPath = null
+  let renaming = false,
+    saving = false,
+    newName = file.name,
+    renameInput,
+    menu,
+    menuX = 0,
+    menuY = 0
+  const menuId = `file-menu-${++nextMenuId}`
 
-  let renaming = false
-  let newName  = file.name
-
-  // ── Icon mapping ──────────────────────────────────
-  function fileIcon(f) {
-    if (f.is_dir) return 'folder'
-    const m = f.mime_type || ''
-    const n = f.name.toLowerCase()
-    if (m.startsWith('image/'))  return 'image'
-    if (m.startsWith('video/'))  return 'video'
-    if (m.startsWith('audio/'))  return 'audio'
-    if (m.includes('pdf'))       return 'text'
-    if (m.includes('zip') || m.includes('tar') || m.includes('gzip') || n.endsWith('.zip')) return 'zip'
-    if (m.startsWith('text/'))   return 'text'
-    return 'file'
+  async function startRename() {
+    menu?.hidePopover()
+    newName = file.name
+    renaming = true
+    await tick()
+    renameInput?.focus()
+    renameInput?.select()
   }
-
-  function fileIconColor(f) {
-    if (f.is_dir) return 'dir'
-    const m = f.mime_type || ''
-    if (m.startsWith('image/'))  return 'img'
-    if (m.startsWith('video/'))  return 'vid'
-    if (m.startsWith('audio/'))  return 'aud'
-    if (m.includes('pdf'))       return 'pdf'
-    if (m.includes('zip') || m.includes('tar')) return 'arc'
-    if (m.startsWith('text/') || m.startsWith('application/json')) return 'txt'
-    return 'def'
-  }
-
-  // ── Size formatting ───────────────────────────────
-  function formatSize(bytes, isDir, dirSize) {
-    if (isDir) {
-      if (!dirSize) return '—'
-      return fmtBytes(dirSize) + ' total'
-    }
-    if (!bytes) return '—'
-    return fmtBytes(bytes)
-  }
-
-  function fmtBytes(b) {
-    if (b < 1024) return b + ' B'
-    const u = ['KB','MB','GB','TB']
-    const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), u.length - 1)
-    return (b / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0) + '\u00a0' + u[i - 1]
-  }
-
-  function formatDate(d) {
-    const dt = new Date(d)
-    const now = new Date()
-    const diff = now - dt
-    const days = Math.floor(diff / 86400000)
-    if (days === 0) return 'Today, ' + dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    if (days === 1) return 'Yesterday'
-    if (days < 7)   return dt.toLocaleDateString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
-    if (days < 365) return dt.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
-    return dt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
-  }
-
-  // ── Actions ───────────────────────────────────────
-  async function handleDelete() {
-    if (!confirm(`Delete "${file.name}"?`)) return
-    try {
-      await deleteFile(file.path)
-      await loadFiles(get(currentPath))
-      success(`Deleted "${file.name}"`)
-    } catch { error('Delete failed') }
-  }
-
-  async function handleRename() {
-    if (!renaming) {
-      renaming = true
+  async function saveRename() {
+    if (saving) return
+    const name = newName.trim()
+    if (!validName(name)) {
+      error('Use a name without slashes or control characters')
       return
     }
-    const trimmed = newName.trim()
-    if (trimmed && trimmed !== file.name) {
-      try {
-        const dir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : ''
-        await renameFile(file.path, dir ? dir + '/' + trimmed : trimmed)
-        await loadFiles(get(currentPath))
-        success('Renamed')
-      } catch { error('Rename failed') }
+    if (name === file.name) {
+      renaming = false
+      return
     }
-    renaming = false
+    saving = true
+    try {
+      const parent = file.path.includes('/')
+        ? file.path.slice(0, file.path.lastIndexOf('/'))
+        : ''
+      await renameFile(file.path, parent ? `${parent}/${name}` : name)
+      renaming = false
+      success('File renamed')
+      await loadFiles(get(currentPath))
+    } catch (err) {
+      error(err.message)
+    } finally {
+      saving = false
+    }
   }
-
   async function toggleFavorite() {
-    if (file.starred) {
-      await removeFavorite(file.path)
-      success(`Removed from favorites`)
-    } else {
-      await addFavorite(file.path, file.name, file.is_dir)
-      success(`Added to favorites`)
+    try {
+      if (file.starred) await removeFavorite(file.path)
+      else await addFavorite(file.path, file.name, file.is_dir)
+    } catch (err) {
+      error(err.message)
     }
   }
-
+  async function download() {
+    menu?.hidePopover()
+    try {
+      await downloadFile(file.path, file.is_dir)
+    } catch (err) {
+      error(err.message)
+    }
+  }
+  function action(callback) {
+    menu?.hidePopover()
+    callback(file)
+  }
+  function positionMenu(event) {
+    const box = event.currentTarget.getBoundingClientRect()
+    menuX = Math.max(8, Math.min(box.right - 190, innerWidth - 198))
+    menuY = Math.max(8, Math.min(box.bottom + 5, innerHeight - 340))
+  }
   function toggleSelect() {
-    selected.update(s => {
-      const n = new Set(s)
-      n.has(file.path) ? n.delete(file.path) : n.add(file.path)
-      return n
+    selected.update((set) => {
+      const next = new Set(set)
+      next.has(file.path) ? next.delete(file.path) : next.add(file.path)
+      return next
     })
   }
-
-  function cancelRename() {
-    renaming = false
-    newName = file.name
+  function dateLabel(value) {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    })
   }
-
-  // Reaktive Deklarationen — müssen VOR dem Template stehen
+  $: kind = fileKind(file)
   $: isSelected = $selected.has(file.path)
-  $: isImage = file.mime_type?.startsWith('image/')
-  $: isText  = file.mime_type?.startsWith('text/') ||
-    ['js','ts','json','md','yaml','yml','toml','sh','py','go','rs','css','html','xml','csv','ini','conf','txt','log']
-    .some(e => file.name.endsWith('.' + e))
-  $: isZip   = file.name.toLowerCase().endsWith('.zip')
-  $: iconColor = fileIconColor(file)
+  $: isText =
+    file.mime_type?.startsWith('text/') ||
+    /\.(js|ts|json|md|ya?ml|toml|sh|py|go|rs|css|html|xml|csv|ini|conf|txt|log)$/i.test(
+      file.name
+    )
+  $: isZip = /\.zip$/i.test(file.name)
+  $: typeLabel = file.is_dir
+    ? 'Folder'
+    : file.name.includes('.')
+      ? `${file.name.split('.').pop().toUpperCase()} file`
+      : 'File'
 </script>
 
 <tr
   class="row"
   class:selected={isSelected}
   class:drag-over={file.is_dir && dragOverPath === file.path}
-  style="animation-delay: {Math.min(rowIndex * 18, 300)}ms"
-  draggable="true"
-  ondragstart={(e) => e.dataTransfer.setData('fileship/path', file.path)}
+  draggable={!renaming}
+  ondragstart={(e) => {
+    e.dataTransfer.setData('fileship/path', file.path)
+    e.dataTransfer.effectAllowed = 'move'
+  }}
   ondragover={(e) => file.is_dir && onDragOver(e, file.path)}
-  ondragleave={() => { dragOverPath = null }}
+  ondragleave={() => (dragOverPath = null)}
   ondrop={(e) => file.is_dir && onDrop(e, file.path)}
 >
-  <!-- Checkbox -->
-  <td class="col-check">
-    <input type="checkbox" onchange={toggleSelect} checked={isSelected} aria-label="Select {file.name}" />
-  </td>
-
-  <!-- Name -->
-  <td class="col-name">
-    {#if renaming}
-      <input
-        class="rename-input"
-        bind:value={newName}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') handleRename()
-          if (e.key === 'Escape') cancelRename()
+  <td class="col-check"
+    ><input
+      type="checkbox"
+      onchange={toggleSelect}
+      checked={isSelected}
+      aria-label={`Select ${file.name}`}
+    /></td
+  >
+  <td class="col-name"
+    ><span class="file-icon-wrap kind-{kind}"
+      ><Icon name={kind} size={19} /></span
+    >{#if renaming}<form
+        class="rename-form"
+        onsubmit={(e) => {
+          e.preventDefault()
+          saveRename()
         }}
-        onblur={handleRename}
-        aria-label="Rename file"
-      />
-    {:else}
-      <span class="file-icon-wrap color-{iconColor}">
-        <Icon name={fileIcon(file)} size={14} />
-      </span>
-      {#if file.is_dir}
-        <button class="name-btn" onclick={() => onNavigate(file.path)}>
-          <span class="name-text">{file.name}</span>
-        </button>
-      {:else}
-        <button class="name-btn" onclick={() => onPreview(file)}>
-          <span class="name-text">{file.name}</span>
-        </button>
-      {/if}
-    {/if}
-  </td>
-
-  <!-- Size (+ folder total) -->
-  <td class="col-size">
-    <span class="size-text" class:has-dir-size={file.is_dir && file.dir_size > 0}>
-      {formatSize(file.size, file.is_dir, file.dir_size)}
-    </span>
-  </td>
-
-  <!-- Modified -->
-  <td class="col-date hide-mobile">
-    <span class="date-text" title={new Date(file.mod_time).toLocaleString()}>
-      {formatDate(file.mod_time)}
-    </span>
-  </td>
-
-  <!-- Actions -->
-  <td class="col-actions">
-    <div class="action-group">
-      {#if file.is_dir}
-        <button class="act" onclick={() => downloadFile(file.path, true)} title="Download as ZIP">
-          <Icon name="download" size={13} />
-        </button>
-      {:else}
-        <button class="act" onclick={() => onPreview(file)} title="Preview">
-          <Icon name="eye" size={13} />
-        </button>
-        <button class="act" onclick={() => downloadFile(file.path)} title="Download">
-          <Icon name="download" size={13} />
-        </button>
-        {#if isText}
-          <button class="act" onclick={() => onEdit(file)} title="Edit">
-            <Icon name="edit" size={13} />
-          </button>
-        {/if}
-        {#if isZip}
-          <button class="act" onclick={() => onUnzip(file)} title="Extract ZIP">
-            <Icon name="extract" size={13} />
-          </button>
-        {/if}
-      {/if}
-      <button class="act" onclick={() => onShare(file)} title="Share">
-        <Icon name="share" size={13} />
-      </button>
-      <button class="act star" class:starred={file.starred} onclick={toggleFavorite}
-        title={file.starred ? 'Remove from favorites' : 'Add to favorites'}>
-        <Icon name={file.starred ? 'check' : 'save'} size={13} />
-      </button>
-      <button class="act" onclick={handleRename} title="Rename">
-        <Icon name="rename" size={13} />
-      </button>
-      <div class="act-divider"></div>
-      <button class="act danger" onclick={handleDelete} title="Delete">
-        <Icon name="trash" size={13} />
-      </button>
+      >
+        <input
+          class="rename-input"
+          bind:this={renameInput}
+          bind:value={newName}
+          aria-label="Rename file"
+          onkeydown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              renaming = false
+            }
+          }}
+        /><button class="act" disabled={saving} aria-label="Save name"
+          ><Icon name="check" size={16} /></button
+        ><button
+          type="button"
+          class="act"
+          aria-label="Cancel rename"
+          onclick={() => (renaming = false)}><Icon name="x" size={16} /></button
+        >
+      </form>{:else}<button
+        class="name-btn"
+        title={file.path}
+        onclick={() => (file.is_dir ? onNavigate(file.path) : onPreview(file))}
+        ><span class="name-text">{file.name}</span><span class="type-label"
+          >{showPath ? file.path : typeLabel}</span
+        ></button
+      >{/if}</td
+  >
+  <td class="col-size"
+    >{file.is_dir
+      ? file.dir_size > 0
+        ? formatBytes(file.dir_size)
+        : '—'
+      : formatBytes(file.size)}</td
+  ><td class="col-date"
+    ><span title={file.mod_time ? new Date(file.mod_time).toLocaleString() : ''}
+      >{dateLabel(file.mod_time)}</span
+    ></td
+  >
+  <td class="col-actions"
+    ><div class="action-group">
+      <button
+        class="act star"
+        class:starred={file.starred}
+        onclick={toggleFavorite}
+        aria-label={file.starred ? `Unstar ${file.name}` : `Star ${file.name}`}
+        title={file.starred ? 'Remove from favorites' : 'Add to favorites'}
+        ><Icon name="star" size={16} /></button
+      ><button
+        class="act download"
+        onclick={download}
+        aria-label={`Download ${file.name}`}
+        title={file.is_dir ? 'Download as ZIP' : 'Download'}
+        ><Icon name="download" size={16} /></button
+      ><button
+        class="act"
+        popovertarget={menuId}
+        onclick={positionMenu}
+        aria-label={`Actions for ${file.name}`}
+        title="More actions"><Icon name="more" size={18} /></button
+      >
     </div>
-  </td>
+    <div
+      id={menuId}
+      bind:this={menu}
+      popover
+      class="row-menu"
+      style={`left:${menuX}px;top:${menuY}px`}
+      aria-label={`Actions for ${file.name}`}
+    >
+      {#if !file.is_dir}<button onclick={() => action(onPreview)}
+          ><Icon name="eye" size={16} />Preview</button
+        >{/if}<button onclick={download}
+        ><Icon name="download" size={16} />{file.is_dir
+          ? 'Download ZIP'
+          : 'Download'}</button
+      >{#if isText}<button onclick={() => action(onEdit)}
+          ><Icon name="edit" size={16} />Edit file</button
+        >{/if}{#if isZip}<button onclick={() => action(onUnzip)}
+          ><Icon name="extract" size={16} />Extract ZIP</button
+        >{/if}<button onclick={() => action(onShare)}
+        ><Icon name="share" size={16} />Share link</button
+      ><button onclick={startRename}
+        ><Icon name="rename" size={16} />Rename</button
+      ><button class="danger" onclick={() => action(onDelete)}
+        ><Icon name="trash" size={16} />Move to trash</button
+      >
+    </div></td
+  >
 </tr>
 
 <style>
   .row {
     border-bottom: 1px solid var(--border2);
-    transition: background var(--transition);
-    animation: row-in 0.2s ease both;
+    transition: background 0.15s;
   }
-
-  @keyframes row-in {
-    from { opacity: 0; transform: translateX(-4px); }
-    to   { opacity: 1; transform: none; }
+  .row:last-child {
+    border-bottom: 0;
   }
-
-  .row:hover { background: var(--row-hover); }
-  .row.selected { background: var(--row-active); }
+  .row:hover {
+    background: var(--row-hover);
+  }
+  .row.selected {
+    background: var(--row-active);
+  }
   .row.drag-over {
-    background: var(--accent-soft);
     outline: 2px dashed var(--accent);
     outline-offset: -2px;
+    background: var(--accent-soft);
   }
-
   td {
-    padding: 0.62rem 1rem;
+    padding: 14px 17px;
     vertical-align: middle;
   }
-
-  /* Checkbox */
-  .col-check { width: 2.5rem; }
-
-  /* Name */
+  .col-check {
+    width: 48px;
+  }
   .col-name {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 12px;
     min-width: 0;
   }
-
   .file-icon-wrap {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 40px;
     display: grid;
     place-items: center;
-    border-radius: 7px;
+    border-radius: 8px;
     flex-shrink: 0;
-    transition: transform var(--transition);
+    color: var(--text2);
+    background: var(--surface2);
   }
-
-  .row:hover .file-icon-wrap { transform: scale(1.06); }
-
-  /* Icon colours */
-  .color-dir { background: rgba(79,158,255,0.12); color: var(--accent); }
-  .color-img { background: rgba(236,107,177,0.12); color: #ec6bb1; }
-  .color-vid { background: rgba(138,100,255,0.12); color: #8a64ff; }
-  .color-aud { background: rgba(71,196,160,0.12);  color: #47c4a0; }
-  .color-pdf { background: rgba(255,95,95,0.12);   color: #ff5f5f; }
-  .color-arc { background: rgba(255,171,64,0.12);  color: #ffab40; }
-  .color-txt { background: rgba(94,199,138,0.12);  color: var(--success); }
-  .color-def { background: var(--surface2); color: var(--text3); }
-
+  .kind-folder {
+    color: #a88737;
+    background: #f8f2df;
+  }
+  .kind-image {
+    color: #7d65ac;
+    background: #f0eaf9;
+  }
+  .kind-video {
+    color: #b77654;
+    background: #fbede4;
+  }
+  .kind-audio {
+    color: #639484;
+    background: #e7f2ec;
+  }
+  .kind-text {
+    color: #6085af;
+    background: #ebf1f9;
+  }
+  .kind-archive {
+    color: #a98539;
+    background: #f8f0df;
+  }
   .name-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    border: 0;
     background: none;
-    border: none;
     color: var(--text);
     cursor: pointer;
-    text-align: left;
-    padding: 0;
-    min-width: 0;
-    flex: 1;
-    display: flex;
-    align-items: center;
   }
-
   .name-text {
-    font-size: 0.875rem;
+    font-size: 12px;
+    font-weight: 500;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 38vw;
-    transition: color var(--transition);
   }
-
-  .name-btn:hover .name-text { color: var(--accent); }
-
-  .rename-input {
-    background: var(--input-bg);
-    border: 1px solid var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-    color: var(--text);
-    border-radius: var(--radius);
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-    width: 100%;
-    min-width: 120px;
+  .name-btn:hover .name-text {
+    color: var(--accent);
   }
-
-  /* Size */
-  .col-size { color: var(--text3); font-size: 0.8rem; white-space: nowrap; }
-  .size-text.has-dir-size { color: var(--text2); font-size: 0.78rem; }
-
-  /* Date */
-  .col-date { white-space: nowrap; }
-  .date-text { font-size: 0.78rem; color: var(--text3); }
-
-  /* Actions */
-  .col-actions { padding-right: 0.75rem; }
+  .type-label {
+    font-size: 9px;
+    color: var(--text3);
+  }
+  .col-size,
+  .col-date {
+    color: var(--text2);
+    font-size: 10px;
+    white-space: nowrap;
+  }
   .action-group {
     display: flex;
     align-items: center;
-    gap: 2px;
-    opacity: 0;
-    transition: opacity var(--transition);
+    justify-content: flex-end;
+    gap: 5px;
   }
-
-  .row:hover .action-group,
-  .row.selected .action-group {
-    opacity: 1;
-  }
-
   .act {
-    background: none;
-    border: none;
-    color: var(--text2);
-    cursor: pointer;
-    padding: 0.32rem;
-    border-radius: 5px;
     display: grid;
     place-items: center;
-    transition: background var(--transition), color var(--transition);
+    border: 0;
+    background: none;
+    color: var(--text3);
+    padding: 7px;
+    border-radius: 5px;
+    cursor: pointer;
   }
-
-  .act:hover { background: var(--surface2); color: var(--text); }
-  .act.danger:hover { background: var(--danger-bg); color: var(--danger); }
-
-  .act.star { color: var(--text3); }
-  .act.star.starred { color: var(--warning); }
-  .act.star:hover { background: rgba(245,166,35,0.1); color: var(--warning); }
-
-  .act-divider {
-    width: 1px;
-    height: 14px;
-    background: var(--border);
-    margin: 0 2px;
+  .act:hover {
+    background: var(--surface3);
+    color: var(--text);
   }
-
-  /* Grid overrides */
-  :global(.grid-view) .action-group { opacity: 1; }
-
-  @media (max-width: 680px) {
-    .hide-mobile { display: none !important; }
-    .name-text { max-width: 50vw; }
+  .star.starred {
+    color: var(--warning);
+  }
+  .star.starred :global(svg) {
+    fill: var(--warning);
+  }
+  .download {
+    opacity: 0;
+  }
+  .row:hover .download,
+  .row:focus-within .download,
+  .row.selected .download {
+    opacity: 1;
+  }
+  .row-menu {
+    position: fixed;
+    margin: 0;
+    width: 190px;
+    padding: 6px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    box-shadow: var(--shadow-lg);
+  }
+  .row-menu button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 10px;
+    font-size: 12px;
+    background: none;
+    color: var(--text);
+    border: 0;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .row-menu button:hover {
+    background: var(--row-hover);
+  }
+  .row-menu button.danger {
+    color: var(--danger);
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    margin-top: 4px;
+  }
+  .rename-form {
+    display: flex;
+    flex: 1;
+    gap: 4px;
+    min-width: 0;
+  }
+  .rename-input {
+    width: 100%;
+    min-width: 0;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 7px;
+    font-size: 12px;
+  }
+  @media (hover: none) {
+    .download {
+      opacity: 1;
+    }
+    .act {
+      min-height: 38px;
+    }
+  }
+  @media (max-width: 600px) {
+    td {
+      padding: 12px;
+    }
+    .col-name {
+      gap: 8px;
+    }
+    .download {
+      display: none;
+    }
+    .file-icon-wrap {
+      width: 31px;
+      height: 35px;
+    }
+    .col-check {
+      width: 33px;
+    }
+    .action-group {
+      gap: 0;
+    }
+    .act {
+      padding: 6px;
+    }
+    .name-text {
+      max-width: 40vw;
+    }
+    .type-label {
+      font-size: 8px;
+    }
   }
 </style>

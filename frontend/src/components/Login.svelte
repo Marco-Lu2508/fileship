@@ -10,10 +10,11 @@
   let showPw = false
 
   async function handleSubmit() {
+    if (loading) return
     errorMsg = ''
     loading = true
     try {
-      const result = await login(username, password)
+      await login(username.trim(), password)
       // 2FA flow: twoFAPending store wird gesetzt, UI wechselt
     } catch (e) {
       errorMsg = e.message || 'Login failed'
@@ -23,7 +24,11 @@
   }
 
   async function handle2FA() {
-    if (!twoFACode.trim()) { errorMsg = 'Enter your 6-digit code'; return }
+    if (loading) return
+    if (!twoFACode.trim()) {
+      errorMsg = 'Enter your 6-digit code'
+      return
+    }
     errorMsg = ''
     loading = true
     try {
@@ -43,15 +48,28 @@
   <div class="card">
     <div class="brand">
       <div class="brand-icon">
-        <Icon name="folder" size={22} />
+        <Icon name="ship" size={26} />
       </div>
       <div class="brand-text">
         <span class="brand-name">Fileship</span>
-        <span class="brand-sub">Self-hosted file manager</span>
+        <span class="brand-sub">Your files. Your space.</span>
       </div>
     </div>
 
-    <form onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+    <div class="welcome">
+      <h1>{is2FAStep ? 'One more step.' : 'Welcome aboard.'}</h1>
+      <p>
+        {is2FAStep
+          ? 'A little extra protection for your workspace.'
+          : 'Sign in to pick up where you left off.'}
+      </p>
+    </div>
+    <form
+      onsubmit={(e) => {
+        e.preventDefault()
+        is2FAStep ? handle2FA() : handleSubmit()
+      }}
+    >
       {#if is2FAStep}
         <!-- 2FA Step -->
         <div class="twofa-header">
@@ -66,23 +84,33 @@
           <input
             id="twofa-code"
             type="text"
-            inputmode="numeric"
-            maxlength="6"
+            maxlength="32"
             bind:value={twoFACode}
             autocomplete="one-time-code"
             required
-            placeholder="000000"
+            placeholder="Code or backup code"
             class="code-input"
           />
         </div>
         {#if errorMsg}
-          <div class="error-msg"><Icon name="warning" size={13} /><span>{errorMsg}</span></div>
+          <div class="error-msg" role="alert">
+            <Icon name="warning" size={13} /><span>{errorMsg}</span>
+          </div>
         {/if}
-        <button type="button" class="submit-btn" onclick={handle2FA} disabled={loading}>
+        <button type="submit" class="submit-btn" disabled={loading}>
           {#if loading}<span class="btn-spinner"></span> Verifying…
           {:else}Verify{/if}
         </button>
-        <button type="button" class="back-link" onclick={() => twoFAPending.set(null)}>
+        <button
+          type="button"
+          class="back-link"
+          disabled={loading}
+          onclick={() => {
+            twoFAPending.set(null)
+            errorMsg = ''
+            twoFACode = ''
+          }}
+        >
           ← Back to login
         </button>
       {:else}
@@ -91,24 +119,43 @@
           <label for="username">Username</label>
           <div class="input-wrap">
             <span class="input-icon"><Icon name="user" size={14} /></span>
-            <input id="username" type="text" bind:value={username}
-              autocomplete="username" required placeholder="admin" />
+            <input
+              id="username"
+              type="text"
+              bind:value={username}
+              autocomplete="username"
+              required
+              placeholder="admin"
+            />
           </div>
         </div>
         <div class="field">
           <label for="password">Password</label>
           <div class="input-wrap">
             <span class="input-icon"><Icon name="lock" size={14} /></span>
-            <input id="password" type={showPw ? 'text' : 'password'} bind:value={password}
-              autocomplete="current-password" required placeholder="••••••••" />
-            <button type="button" class="pw-toggle" onclick={() => showPw = !showPw}
-              aria-label="Toggle password visibility">
-              <Icon name={showPw ? 'eye' : 'eye'} size={14} />
+            <input
+              id="password"
+              type={showPw ? 'text' : 'password'}
+              bind:value={password}
+              autocomplete="current-password"
+              required
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              class="pw-toggle"
+              onclick={() => (showPw = !showPw)}
+              aria-label={showPw ? 'Hide password' : 'Show password'}
+              aria-pressed={showPw}
+            >
+              <Icon name={showPw ? 'eye_off' : 'eye'} size={14} />
             </button>
           </div>
         </div>
         {#if errorMsg}
-          <div class="error-msg"><Icon name="warning" size={13} /><span>{errorMsg}</span></div>
+          <div class="error-msg" role="alert">
+            <Icon name="warning" size={13} /><span>{errorMsg}</span>
+          </div>
         {/if}
         <button type="submit" class="submit-btn" disabled={loading}>
           {#if loading}<span class="btn-spinner"></span> Signing in…
@@ -118,7 +165,7 @@
     </form>
   </div>
 
-  <p class="footer-note">Fileship · Self-hosted · MIT</p>
+  <p class="footer-note">A home for everything you’re working on.</p>
 </div>
 
 <style>
@@ -128,7 +175,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: var(--bg);
+    background:
+      radial-gradient(ellipse at 50% 0%, var(--accent-soft), transparent 60%),
+      var(--bg);
     padding: 1.5rem;
     gap: 1rem;
   }
@@ -139,14 +188,20 @@
     border-radius: var(--radius-lg);
     padding: 2.25rem 2rem;
     width: 100%;
-    max-width: 360px;
+    max-width: 420px;
     box-shadow: var(--shadow-lg);
-    animation: card-in 0.25s cubic-bezier(.2,.8,.3,1) both;
+    animation: card-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1) both;
   }
 
   @keyframes card-in {
-    from { opacity: 0; transform: translateY(16px) scale(0.97); }
-    to   { opacity: 1; transform: none; }
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   .brand {
@@ -160,12 +215,12 @@
     width: 44px;
     height: 44px;
     border-radius: var(--radius);
-    background: var(--accent);
+    background: var(--sidebar-bg);
     display: grid;
     place-items: center;
-    color: #fff;
+    color: #b9d99e;
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(79,158,255,0.4);
+    box-shadow: none;
   }
 
   .brand-text {
@@ -183,6 +238,19 @@
 
   .brand-sub {
     font-size: 0.75rem;
+    color: var(--text2);
+  }
+  .welcome {
+    margin-bottom: 25px;
+  }
+  .welcome h1 {
+    font-weight: 600;
+    font-size: 29px;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+  }
+  .welcome p {
+    font-size: 12px;
     color: var(--text2);
   }
 
@@ -228,7 +296,9 @@
     border-radius: var(--radius);
     color: var(--text);
     font-size: 0.9rem;
-    transition: border-color var(--transition), box-shadow var(--transition);
+    transition:
+      border-color var(--transition),
+      box-shadow var(--transition);
   }
 
   input:focus {
@@ -249,7 +319,9 @@
     border-radius: 4px;
   }
 
-  .pw-toggle:hover { color: var(--text2); }
+  .pw-toggle:hover {
+    color: var(--text2);
+  }
 
   .error-msg {
     display: flex;
@@ -265,9 +337,18 @@
   }
 
   @keyframes shake {
-    0%, 100% { transform: none; }
-    20%, 60%  { transform: translateX(-4px); }
-    40%, 80%  { transform: translateX(4px); }
+    0%,
+    100% {
+      transform: none;
+    }
+    20%,
+    60% {
+      transform: translateX(-4px);
+    }
+    40%,
+    80% {
+      transform: translateX(4px);
+    }
   }
 
   .submit-btn {
@@ -284,14 +365,17 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
-    box-shadow: 0 2px 8px rgba(79,158,255,0.3);
+    transition:
+      background var(--transition),
+      transform var(--transition),
+      box-shadow var(--transition);
+    box-shadow: 0 2px 8px rgba(79, 158, 255, 0.3);
     margin-top: 0.25rem;
   }
 
   .submit-btn:hover:not(:disabled) {
     background: var(--accent-h);
-    box-shadow: 0 4px 14px rgba(79,158,255,0.45);
+    box-shadow: 0 4px 14px rgba(79, 158, 255, 0.45);
   }
 
   .submit-btn:active:not(:disabled) {
@@ -306,13 +390,17 @@
   .btn-spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255,255,255,0.4);
+    border: 2px solid rgba(255, 255, 255, 0.4);
     border-top-color: #fff;
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   .footer-note {
     font-size: 0.75rem;
@@ -321,27 +409,53 @@
 
   /* 2FA step */
   .twofa-header {
-    display: flex; align-items: flex-start; gap: 0.75rem;
-    background: var(--accent-soft); border: 1px solid rgba(79,158,255,0.25);
-    border-radius: var(--radius); padding: 0.85rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: var(--accent-soft);
+    border: 1px solid rgba(79, 158, 255, 0.25);
+    border-radius: var(--radius);
+    padding: 0.85rem;
   }
   .twofa-icon {
-    width: 36px; height: 36px; border-radius: var(--radius);
-    background: var(--accent); color: #fff;
-    display: grid; place-items: center; flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
   }
-  .twofa-header strong { font-size: 0.9rem; display: block; color: var(--text); }
-  .twofa-header p { font-size: 0.78rem; color: var(--text2); margin-top: 0.15rem; }
+  .twofa-header strong {
+    font-size: 0.9rem;
+    display: block;
+    color: var(--text);
+  }
+  .twofa-header p {
+    font-size: 0.78rem;
+    color: var(--text2);
+    margin-top: 0.15rem;
+  }
   .code-input {
-    text-align: center; letter-spacing: 0.4rem;
-    font-size: 1.4rem; font-family: monospace;
-    padding: 0.65rem 0.75rem 0.65rem 2.2rem;
+    text-align: center;
+    letter-spacing: 0.08rem;
+    font-size: 1rem;
+    font-family: monospace;
+    padding: 0.75rem;
   }
   .back-link {
-    background: none; border: none; color: var(--text2);
-    font-size: 0.8rem; cursor: pointer; padding: 0;
-    text-align: center; width: 100%;
+    background: none;
+    border: none;
+    color: var(--text2);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0;
+    text-align: center;
+    width: 100%;
     transition: color var(--transition);
   }
-  .back-link:hover { color: var(--accent); }
+  .back-link:hover {
+    color: var(--accent);
+  }
 </style>

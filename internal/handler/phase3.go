@@ -29,6 +29,9 @@ func (h *Handler) trashDir() string {
 
 // SoftDelete verschiebt eine Datei/Ordner in den Papierkorb
 func (h *Handler) SoftDelete(userID int64, root, relPath string) error {
+	if _, err := fsvc.CleanRelativePath(relPath); err != nil {
+		return err
+	}
 	abs, err := fsvc.Resolve(root, relPath)
 	if err != nil {
 		return err
@@ -46,16 +49,21 @@ func (h *Handler) SoftDelete(userID int64, root, relPath string) error {
 	trashName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(abs))
 	trashPath := filepath.Join(trashDir, trashName)
 
-	if err := os.Rename(abs, trashPath); err != nil {
-		return err
-	}
-
 	size := info.Size()
 	if info.IsDir() {
-		size, _ = fsvc.DirSize(trashPath)
+		size, _ = fsvc.DirSize(abs)
 	}
-
-	return h.db.TrashPut(userID, relPath, trashName, info.Name(), info.IsDir(), size, trashRetentionDays)
+	// Write recovery metadata before touching the source.
+	if err := h.db.TrashPut(userID, relPath, trashName, info.Name(), info.IsDir(), size, trashRetentionDays); err != nil {
+		return err
+	}
+	if err := fsvc.Transfer(abs, trashPath); err != nil {
+		if _, statErr := os.Stat(trashPath); os.IsNotExist(statErr) {
+			h.db.TrashDelete(userID, trashName)
+		}
+		return err
+	}
+	return nil
 }
 
 func (h *Handler) trashList(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +127,7 @@ func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.Rename(trashPath, restorePath); err != nil {
+	if err := fsvc.Transfer(trashPath, restorePath); err != nil {
 		http.Error(w, "could not restore: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

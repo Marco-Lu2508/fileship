@@ -1,0 +1,10 @@
+.git
+.env
+**/node_modules
+frontend/dist
+data
+*.db
+*.db-shm
+*.db-wal
+fileship
+*.exe

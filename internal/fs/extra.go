@@ -34,7 +34,7 @@ func ListPaged(root string, opts model.ListOptions) (model.ListResult, error) {
 		}
 		fi := model.FileInfo{
 			Name:    e.Name(),
-			Path:    filepath.Join(opts.Path, e.Name()),
+			Path:    filepath.ToSlash(filepath.Join(opts.Path, e.Name())),
 			Size:    info.Size(),
 			IsDir:   e.IsDir(),
 			ModTime: info.ModTime(),
@@ -84,19 +84,27 @@ func less(a, b model.FileInfo, by string, asc bool) bool {
 	if a.IsDir != b.IsDir {
 		return a.IsDir
 	}
-	var result bool
+	var comparison int
 	switch by {
 	case "size":
-		result = a.Size < b.Size
+		if a.Size < b.Size {
+			comparison = -1
+		} else if a.Size > b.Size {
+			comparison = 1
+		}
 	case "mod_time":
-		result = a.ModTime.Before(b.ModTime)
+		if a.ModTime.Before(b.ModTime) {
+			comparison = -1
+		} else if a.ModTime.After(b.ModTime) {
+			comparison = 1
+		}
 	default:
-		result = strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		comparison = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	}
 	if !asc {
-		return !result
+		return comparison > 0
 	}
-	return result
+	return comparison < 0
 }
 
 func Search(root, query string) ([]model.FileInfo, error) {
@@ -112,7 +120,7 @@ func Search(root, query string) ([]model.FileInfo, error) {
 			rel, _ := filepath.Rel(abs, path)
 			fi := model.FileInfo{
 				Name:    info.Name(),
-				Path:    rel,
+				Path:    filepath.ToSlash(rel),
 				Size:    info.Size(),
 				IsDir:   info.IsDir(),
 				ModTime: info.ModTime(),
@@ -185,9 +193,11 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func copyDir(src, dst string) error {

@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+RUN npm run check && npm test && npm run build
 
 # Stage 2: Build Backend
 FROM golang:1.23-alpine AS backend-builder
@@ -13,6 +13,7 @@ WORKDIR /app
 COPY . .
 # Copy built frontend AFTER COPY . . so it's available for go:embed
 COPY --from=frontend-builder /app/frontend/dist ./internal/static/dist
+RUN CGO_ENABLED=1 go test -mod=vendor ./... && go vet -mod=vendor ./...
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship ./cmd/fileship
 
 # Stage 3: Final minimal image

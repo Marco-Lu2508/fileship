@@ -15,13 +15,17 @@ Fileship gives teams a fast web workspace for browsing, organizing, previewing, 
 
 - Browse folders with breadcrumbs and fast folder navigation
 - List view and persistent grid view
+- Responsive workspace with mobile navigation, file-type filters and quick-access favorites
+- Page navigation for large folders, with sorting across the complete folder
 - Sort by name, size and modification date
 - Instant filtering plus recursive server-side search
 - Multi-select with keyboard shortcuts
 - Drag and drop files into folders
 - Upload individual files or complete folder trees
+- Upload progress, failure details and retry actions
 - Create empty files and folders from the UI
 - Rename, copy, move and delete items
+- Recoverable deletion across separate Docker volumes; interrupted uploads preserve existing files
 - Download files, folders as ZIP, or selected items as one archive
 - Extract ZIP archives
 
@@ -396,8 +400,10 @@ Frontend:
 ```bash
 cd frontend
 npm ci
+npm run check
+npm test
 npm run dev
-npm run build
+npm run build:embedded
 ```
 
 Build the production binary:
@@ -414,6 +420,10 @@ docker compose up -d --build
 ```
 
 The Docker build compiles the Svelte frontend first, copies its `dist` output into `internal/static/dist`, and then embeds it into the Go binary.
+
+`npm run build:embedded` performs the same synchronization for local builds. Docker builds run the frontend checks and regression tests, plus the Go tests and vet checks, before producing an image. The SQLite integration tests require CGO and a C compiler. On Windows, run them in WSL with those tools installed.
+
+Deleted items remain in Trash for 30 days. If the recovery copy cannot be created or registered, deletion fails without falling back to permanent deletion. Folder uploads retain their relative paths. File-type and favorites filters apply to the current page; recursive search checks the workspace.
 
 ## Troubleshooting
 

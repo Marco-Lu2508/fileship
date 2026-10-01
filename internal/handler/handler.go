@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -120,6 +121,7 @@ func (h *Handler) Routes() http.Handler {
 
 	return r
 }
+
 // --- Auth ---
 
 // dummyHash für Timing-Attack-Schutz — wird beim Login verwendet wenn User nicht existiert
@@ -345,6 +347,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	dir := r.FormValue("path")
 	if !h.checkPerm(w, r, dir, "write") {
 		return
@@ -352,7 +355,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	root := h.userRoot(r)
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
 	files := r.MultipartForm.File["files"]
-	if len(files) > 100 {
+	if len(files) == 0 || len(files) > 100 {
 		http.Error(w, "too many files (max 100)", http.StatusBadRequest)
 		return
 	}
@@ -372,10 +375,24 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims, username := h.claimsUser(r)
+	// Multipart parsers strip directories from filenames; carry folder paths explicitly.
+	relativePath := r.FormValue("relative_path")
+	if relativePath != "" && len(files) != 1 {
+		http.Error(w, "relative_path requires one file", http.StatusBadRequest)
+		return
+	}
 	for _, fh := range files {
-		safeName, err := fsvc.CleanRelativePath(fh.Filename)
+		name := fh.Filename
+		if relativePath != "" {
+			name = relativePath
+		}
+		safeName, err := fsvc.CleanRelativePath(name)
 		if err != nil {
-			continue
+			http.Error(w, "invalid upload path", http.StatusBadRequest)
+			return
+		}
+		if !h.checkPerm(w, r, filepath.ToSlash(filepath.Join(dir, safeName)), "write") {
+			return
 		}
 		if allowedTypes != "" && !fsvc.TypeAllowed(safeName, allowedTypes) {
 			http.Error(w, "file type not allowed: "+safeName, http.StatusForbidden)
@@ -383,9 +400,10 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		f, err := fh.Open()
 		if err != nil {
-			continue
+			http.Error(w, "could not read upload", http.StatusBadRequest)
+			return
 		}
-		if err := fsvc.SaveUpload(root, dir+"/"+safeName, f); err != nil {
+		if err := fsvc.SaveUpload(root, filepath.Join(dir, safeName), f); err != nil {
 			f.Close()
 			http.Error(w, "could not save file", http.StatusInternalServerError)
 			return
@@ -401,6 +419,10 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
+	if _, err := fsvc.CleanRelativePath(path); err != nil {
+		http.Error(w, "cannot delete workspace root", http.StatusBadRequest)
+		return
+	}
 	if !h.checkPerm(w, r, path, "delete") {
 		return
 	}
@@ -416,11 +438,8 @@ func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if err := h.SoftDelete(claims.UserID, root, path); err != nil {
-			// Fallback auf hard delete wenn Papierkorb nicht funktioniert
-			if err2 := fsvc.Delete(root, path); err2 != nil {
-				http.Error(w, err2.Error(), http.StatusBadRequest)
-				return
-			}
+			http.Error(w, "could not move to trash: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -430,9 +449,14 @@ func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) touch(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Path string `json:"path"` }
+	var body struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.checkPerm(w, r, body.Path, "write") {
 		return
 	}
 	if err := fsvc.CreateFile(h.userRoot(r), body.Path); err != nil {
@@ -444,8 +468,20 @@ func (h *Handler) touch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) mkdir(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Path string `json:"path"` }
-	json.NewDecoder(r.Body).Decode(&body)
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if _, err := fsvc.CleanRelativePath(body.Path); err != nil {
+		http.Error(w, "folder path required", http.StatusBadRequest)
+		return
+	}
+	if !h.checkPerm(w, r, body.Path, "write") {
+		return
+	}
 	if err := fsvc.Mkdir(h.userRoot(r), body.Path); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

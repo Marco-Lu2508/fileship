@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 )
 
 //go:embed dist
@@ -20,13 +21,23 @@ func FileServer() http.Handler {
 	}
 	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			path := r.URL.Path[1:]
-			if path == "" {
-				http.ServeFileFS(w, r, dist, "index.html")
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" || path == "index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFileFS(w, r, dist, "index.html")
+			return
+		}
+		if _, err := fs.Stat(dist, path); err != nil {
+			if strings.HasPrefix(path, "assets/") || strings.HasPrefix(path, "locales/") || path == "favicon.svg" {
+				http.NotFound(w, r)
 				return
-			} else if _, err := fs.Stat(dist, path); err != nil {
-				http.ServeFileFS(w, r, dist, "index.html")
-				return
+			}
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFileFS(w, r, dist, "index.html")
+			return
+		}
+		if strings.HasPrefix(path, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		fileServer.ServeHTTP(w, r)
 	})

@@ -9,5 +9,6 @@ export function csrfHeaders() {
 
 export async function ensureCSRFToken() {
   if (getCSRFToken()) return
-  await fetch('/', { credentials: 'same-origin', cache: 'no-store' })
+  // API GETs also set the cookie when Vite serves the development frontend.
+  await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' })
 }

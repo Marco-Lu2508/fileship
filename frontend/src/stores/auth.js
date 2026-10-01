@@ -6,6 +6,8 @@ export const accessToken = writable(localStorage.getItem('access_token') || '')
 export const twoFAPending = writable(null) // { pending_token } wenn 2FA nötig
 
 let refreshTimer = null
+let refreshPromise = null
+let sessionVersion = 0
 
 export async function login(username, password) {
   await ensureCSRFToken()
@@ -44,50 +46,81 @@ export async function verify2FA(pendingToken, code) {
 
 export async function logout() {
   const refresh = localStorage.getItem('refresh_token')
-  await fetch('/api/auth/logout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refresh })
-  })
   clearTokens()
+  try {
+    await ensureCSRFToken()
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ refresh_token: refresh })
+    })
+  } catch {
+    /* Local sign-out still succeeds when the server is unreachable. */
+  }
 }
 
 export async function fetchMe() {
   const res = await apiFetch('/api/me')
-  if (res.ok) user.set(await res.json())
+  if (res.ok) {
+    const profile = await res.json()
+    if (get(accessToken)) user.set(profile)
+  }
 }
 
 export async function refreshTokens() {
-  const refresh = localStorage.getItem('refresh_token')
-  if (!refresh) { clearTokens(); return }
-  const res = await fetch('/api/auth/refresh', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refresh })
+  if (refreshPromise) return refreshPromise
+  const version = sessionVersion
+  refreshPromise = (async () => {
+    const refresh = localStorage.getItem('refresh_token')
+    if (!refresh) {
+      clearTokens()
+      return
+    }
+    await ensureCSRFToken()
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ refresh_token: refresh })
+    })
+    if (version !== sessionVersion) return
+    if (!res.ok) {
+      clearTokens()
+      return
+    }
+    const tokens = await res.json()
+    if (version === sessionVersion) setTokens(tokens)
+  })().finally(() => {
+    refreshPromise = null
   })
-  if (!res.ok) { clearTokens(); return }
-  setTokens(await res.json())
+  return refreshPromise
 }
 
 function setTokens({ access_token, refresh_token }) {
+  sessionVersion++
   localStorage.setItem('access_token', access_token)
   localStorage.setItem('refresh_token', refresh_token)
   accessToken.set(access_token)
   // Auto-refresh 1 min before expiry (access token = 15min)
   clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(refreshTokens, 14 * 60 * 1000)
+  refreshTimer = setTimeout(
+    () => refreshTokens().catch(() => {}),
+    14 * 60 * 1000
+  )
 }
 
 function clearTokens() {
+  sessionVersion++
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
   accessToken.set('')
   user.set(null)
+  twoFAPending.set(null)
   clearTimeout(refreshTimer)
 }
 
 export async function apiFetch(url, options = {}, retry = true) {
-  if (options.method && options.method !== 'GET' && options.method !== 'HEAD') await ensureCSRFToken()
+  if (options.method && options.method !== 'GET' && options.method !== 'HEAD')
+    await ensureCSRFToken()
   const token = get(accessToken)
   const res = await fetch(url, {
     ...options,

@@ -69,7 +69,7 @@ func List(root, rel string) ([]model.FileInfo, error) {
 		}
 		fi := model.FileInfo{
 			Name:    e.Name(),
-			Path:    filepath.Join(rel, e.Name()),
+			Path:    filepath.ToSlash(filepath.Join(rel, e.Name())),
 			Size:    info.Size(),
 			IsDir:   e.IsDir(),
 			ModTime: info.ModTime(),
@@ -106,6 +106,9 @@ func CreateFile(root, rel string) error {
 }
 
 func Delete(root, rel string) error {
+	if _, err := CleanRelativePath(rel); err != nil {
+		return err
+	}
 	abs, err := Resolve(root, rel)
 	if err != nil {
 		return err
@@ -114,12 +117,26 @@ func Delete(root, rel string) error {
 }
 
 func Rename(root, oldRel, newRel string) error {
+	if _, err := CleanRelativePath(oldRel); err != nil {
+		return err
+	}
+	if _, err := CleanRelativePath(newRel); err != nil {
+		return err
+	}
 	oldAbs, err := Resolve(root, oldRel)
 	if err != nil {
 		return err
 	}
 	newAbs, err := Resolve(root, newRel)
 	if err != nil {
+		return err
+	}
+	if oldAbs == newAbs {
+		return nil
+	}
+	if _, err := os.Lstat(newAbs); err == nil {
+		return os.ErrExist
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 	return os.Rename(oldAbs, newAbs)
@@ -133,13 +150,26 @@ func SaveUpload(root, rel string, r io.Reader) error {
 	if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
 		return err
 	}
-	f, err := os.Create(abs)
+	// Write to a temporary sibling so interrupted uploads cannot truncate an
+	// existing file. Only publish the complete upload after its close succeeds.
+	f, err := os.CreateTemp(filepath.Dir(abs), ".fileship-upload-*")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(f, r)
-	return err
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Chmod(0644); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, abs)
 }
 
 func ZipDir(root, rel string, w io.Writer) error {
