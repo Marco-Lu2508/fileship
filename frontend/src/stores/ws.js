@@ -19,8 +19,10 @@ const changes = new Set([
   'unzip',
   'restore'
 ])
+let onWorkspaceChange = () => {}
 
-export function connectWS() {
+export function connectWS(onChange = () => {}) {
+  onWorkspaceChange = onChange
   active = true
   openSocket()
 }
@@ -41,7 +43,10 @@ function openSocket() {
       if (!changes.has(JSON.parse(message.data).type)) return
       clearTimeout(reloadTimer)
       reloadTimer = setTimeout(() => {
-        if (active) loadFiles(get(currentPath))
+        if (active) {
+          loadFiles(get(currentPath))
+          onWorkspaceChange()
+        }
       }, 200)
     } catch {
       /* Ignore malformed events. */
@@ -62,6 +67,7 @@ function openSocket() {
 
 export function disconnectWS() {
   active = false
+  onWorkspaceChange = () => {}
   clearTimeout(reconnectTimer)
   clearTimeout(reloadTimer)
   if (socket) {

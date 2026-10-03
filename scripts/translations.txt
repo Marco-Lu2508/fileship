@@ -1,0 +1,437 @@
+Action|Aktion|Action|Acción|Azione|Ação
+Actions|Aktionen|Actions|Acciones|Azioni|Ações
+Add User|Benutzer hinzufügen|Ajouter un utilisateur|Añadir usuario|Aggiungi utente|Adicionar utilizador
+Add user|Benutzer hinzufügen|Ajouter un utilisateur|Añadir usuario|Aggiungi utente|Adicionar utilizador
+Add rule|Regel hinzufügen|Ajouter une règle|Añadir regla|Aggiungi regola|Adicionar regra
+Add to favorites|Zu Favoriten hinzufügen|Ajouter aux favoris|Añadir a favoritos|Aggiungi ai preferiti|Adicionar aos favoritos
+Admin|Admin|Admin|Admin|Admin|Admin
+Administration|Verwaltung|Administration|Administración|Amministrazione|Administração
+Administrator|Administrator|Administrateur|Administrador|Amministratore|Administrador
+All files|Alle Dateien|Tous les fichiers|Todos los archivos|Tutti i file|Todos os ficheiros
+All types|Alle Typen|Tous les types|Todos los tipos|Tutti i tipi|Todos os tipos
+Allow edit|Bearbeiten erlauben|Autoriser la modification|Permitir edición|Consenti modifica|Permitir edição
+Allow upload|Hochladen erlauben|Autoriser les envois|Permitir subida|Consenti caricamento|Permitir envio
+Allowed MIME types (comma-separated, empty = all)|Erlaubte MIME-Typen (kommagetrennt, leer = alle)|Types MIME autorisés (séparés par des virgules, vide = tous)|Tipos MIME permitidos (separados por comas, vacío = todos)|Tipi MIME consentiti (separati da virgole, vuoto = tutti)|Tipos MIME permitidos (separados por vírgulas, vazio = todos)
+Allowed types|Erlaubte Typen|Types autorisés|Tipos permitidos|Tipi consentiti|Tipos permitidos
+Appearance|Darstellung|Apparence|Apariencia|Aspetto|Aspeto
+Archive extracted|Archiv entpackt|Archive extraite|Archivo extraído|Archivio estratto|Arquivo extraído
+Audio|Audio|Audio|Audio|Audio|Áudio
+Audit Log|Aktivitätsprotokoll|Journal d'activité|Registro de actividad|Registro attività|Registo de atividade
+Audit events|Protokolleinträge|Événements enregistrés|Eventos registrados|Eventi registrati|Eventos registados
+Authentication code|Bestätigungscode|Code d'authentification|Código de autenticación|Codice di autenticazione|Código de autenticação
+Back to Files|Zurück zu Dateien|Retour aux fichiers|Volver a archivos|Torna ai file|Voltar aos ficheiros
+Calculate checksum|Prüfsumme berechnen|Calculer la somme de contrôle|Calcular suma de verificación|Calcola checksum|Calcular soma de verificação
+Calculating…|Wird berechnet…|Calcul en cours…|Calculando…|Calcolo…|A calcular…
+Cancel|Abbrechen|Annuler|Cancelar|Annulla|Cancelar
+Cancel create|Erstellen abbrechen|Annuler la création|Cancelar creación|Annulla creazione|Cancelar criação
+Cancel rename|Umbenennen abbrechen|Annuler le renommage|Cancelar cambio de nombre|Annulla rinomina|Cancelar mudança de nome
+Cannot open file|Datei kann nicht geöffnet werden|Impossible d'ouvrir le fichier|No se puede abrir el archivo|Impossibile aprire il file|Não foi possível abrir o ficheiro
+Change Password|Passwort ändern|Changer le mot de passe|Cambiar contraseña|Cambia password|Alterar palavra-passe
+Checksum|Prüfsumme|Somme de contrôle|Suma de verificación|Checksum|Soma de verificação
+Choose where to paste|Ziel zum Einfügen wählen|Choisir où coller|Elegir dónde pegar|Scegli dove incollare|Escolher onde colar
+Clear completed|Abgeschlossene entfernen|Effacer les transferts terminés|Quitar transferencias completadas|Rimuovi trasferimenti completati|Remover transferências concluídas
+Clear search|Suche leeren|Effacer la recherche|Borrar búsqueda|Cancella ricerca|Limpar pesquisa
+Clear selection|Auswahl aufheben|Effacer la sélection|Quitar selección|Deseleziona|Limpar seleção
+Close|Schließen|Fermer|Cerrar|Chiudi|Fechar
+Close actions|Aktionsmenü schließen|Fermer les actions|Cerrar acciones|Chiudi azioni|Fechar ações
+Close dialog or clear selection|Dialog schließen oder Auswahl aufheben|Fermer le dialogue ou effacer la sélection|Cerrar diálogo o quitar selección|Chiudi dialogo o deseleziona|Fechar diálogo ou limpar seleção
+Close navigation|Navigation schließen|Fermer la navigation|Cerrar navegación|Chiudi navigazione|Fechar navegação
+Close preview|Vorschau schließen|Fermer l'aperçu|Cerrar vista previa|Chiudi anteprima|Fechar pré-visualização
+Code or backup code|Code oder Wiederherstellungscode|Code ou code de secours|Código o código de recuperación|Codice o codice di recupero|Código ou código de recuperação
+Codes copied!|Codes kopiert!|Codes copiés !|¡Códigos copiados!|Codici copiati!|Códigos copiados!
+Complete|Abgeschlossen|Terminé|Completado|Completato|Concluído
+Confirm|Bestätigen|Confirmer|Confirmar|Conferma|Confirmar
+Confirm new password|Neues Passwort bestätigen|Confirmer le nouveau mot de passe|Confirmar nueva contraseña|Conferma nuova password|Confirmar nova palavra-passe
+Connect Finder, Windows Explorer, Cyberduck or any WebDAV client:|Finder, Windows Explorer, Cyberduck oder einen WebDAV-Client verbinden:|Connectez Finder, l'Explorateur Windows, Cyberduck ou un client WebDAV :|Conecta Finder, el Explorador de Windows, Cyberduck o un cliente WebDAV:|Collega Finder, Esplora file, Cyberduck o un client WebDAV:|Ligue o Finder, Explorador do Windows, Cyberduck ou um cliente WebDAV:
+Connecting|Verbindung wird hergestellt|Connexion en cours|Conectando|Connessione|A ligar
+Connection interrupted|Verbindung unterbrochen|Connexion interrompue|Conexión interrumpida|Connessione interrotta|Ligação interrompida
+Copied!|Kopiert!|Copié !|¡Copiado!|Copiato!|Copiado!
+Copy|Kopieren|Copier|Copiar|Copia|Copiar
+Copy all codes|Alle Codes kopieren|Copier tous les codes|Copiar todos los códigos|Copia tutti i codici|Copiar todos os códigos
+Copy here|Hierher kopieren|Copier ici|Copiar aquí|Copia qui|Copiar aqui
+Copy items|Elemente kopieren|Copier les éléments|Copiar elementos|Copia elementi|Copiar itens
+Copy link|Link kopieren|Copier le lien|Copiar enlace|Copia link|Copiar ligação
+Copy selected items|Ausgewählte Elemente kopieren|Copier les éléments sélectionnés|Copiar elementos seleccionados|Copia elementi selezionati|Copiar itens selecionados
+Copy this token — it won't be shown again.|Token jetzt kopieren – er wird nicht erneut angezeigt.|Copiez ce jeton : il ne sera plus affiché.|Copia este token: no se volverá a mostrar.|Copia questo token: non verrà più mostrato.|Copie este token: não será mostrado novamente.
+Could not copy link|Link konnte nicht kopiert werden|Impossible de copier le lien|No se pudo copiar el enlace|Impossibile copiare il link|Não foi possível copiar a ligação
+Could not create share link|Freigabe-Link konnte nicht erstellt werden|Impossible de créer le lien de partage|No se pudo crear el enlace compartido|Impossibile creare il link condiviso|Não foi possível criar a ligação partilhada
+Could not create token|Token konnte nicht erstellt werden|Impossible de créer le jeton|No se pudo crear el token|Impossibile creare il token|Não foi possível criar o token
+Could not delete|Löschen fehlgeschlagen|Suppression impossible|No se pudo eliminar|Impossibile eliminare|Não foi possível eliminar
+Could not empty trash|Papierkorb konnte nicht geleert werden|Impossible de vider la corbeille|No se pudo vaciar la papelera|Impossibile svuotare il cestino|Não foi possível esvaziar o lixo
+Could not load favorites|Favoriten konnten nicht geladen werden|Impossible de charger les favoris|No se pudieron cargar los favoritos|Impossibile caricare i preferiti|Não foi possível carregar os favoritos
+Could not load file.|Datei konnte nicht geladen werden.|Impossible de charger le fichier.|No se pudo cargar el archivo.|Impossibile caricare il file.|Não foi possível carregar o ficheiro.
+Create|Erstellen|Créer|Crear|Crea|Criar
+Create an account and assign its home directory.|Konto erstellen und Stammordner zuweisen.|Créez un compte et attribuez son dossier personnel.|Crea una cuenta y asigna su carpeta personal.|Crea un account e assegna la cartella personale.|Crie uma conta e atribua a pasta pessoal.
+Create another link|Weiteren Link erstellen|Créer un autre lien|Crear otro enlace|Crea un altro link|Criar outra ligação
+Created|Erstellt|Créé|Creado|Creato|Criado
+Creating…|Wird erstellt…|Création…|Creando…|Creazione…|A criar…
+Current password|Aktuelles Passwort|Mot de passe actuel|Contraseña actual|Password attuale|Palavra-passe atual
+Cut selected items|Ausgewählte Elemente ausschneiden|Couper les éléments sélectionnés|Cortar elementos seleccionados|Taglia elementi selezionati|Cortar itens selecionados
+DL limit|Download-Limit|Limite de téléchargements|Límite de descargas|Limite download|Limite de transferências
+Delete|Löschen|Supprimer|Eliminar|Elimina|Eliminar
+Delete permanently|Endgültig löschen|Supprimer définitivement|Eliminar permanentemente|Elimina definitivamente|Eliminar permanentemente
+Delete this user?|Diesen Benutzer löschen?|Supprimer cet utilisateur ?|¿Eliminar este usuario?|Eliminare questo utente?|Eliminar este utilizador?
+Deleted permanently|Endgültig gelöscht|Supprimé définitivement|Eliminado permanentemente|Eliminato definitivamente|Eliminado permanentemente
+Destination folder|Zielordner|Dossier de destination|Carpeta de destino|Cartella di destinazione|Pasta de destino
+Destination name|Name am Ziel|Nom à destination|Nombre en destino|Nome a destinazione|Nome no destino
+Disable 2FA|2FA deaktivieren|Désactiver la 2FA|Desactivar 2FA|Disattiva 2FA|Desativar 2FA
+Disable 2FA…|2FA deaktivieren…|Désactiver la 2FA…|Desactivar 2FA…|Disattiva 2FA…|Desativar 2FA…
+Disabling…|Wird deaktiviert…|Désactivation…|Desactivando…|Disattivazione…|A desativar…
+Disk used|Belegter Speicher|Espace utilisé|Espacio utilizado|Spazio utilizzato|Espaço utilizado
+Dismiss|Ausblenden|Masquer|Descartar|Nascondi|Dispensar
+Documents|Dokumente|Documents|Documentos|Documenti|Documentos
+Done|Fertig|Terminé|Hecho|Fatto|Concluído
+Download|Herunterladen|Télécharger|Descargar|Scarica|Transferir
+Download ZIP|ZIP herunterladen|Télécharger le ZIP|Descargar ZIP|Scarica ZIP|Transferir ZIP
+Download as ZIP|Als ZIP herunterladen|Télécharger au format ZIP|Descargar como ZIP|Scarica come ZIP|Transferir como ZIP
+Download limit (0 = unlimited)|Download-Limit (0 = unbegrenzt)|Limite de téléchargements (0 = illimité)|Límite de descargas (0 = ilimitado)|Limite download (0 = illimitato)|Limite de transferências (0 = ilimitado)
+Download limit reached|Download-Limit erreicht|Limite de téléchargements atteinte|Límite de descargas alcanzado|Limite download raggiunto|Limite de transferências atingido
+Drag & drop your files here, or|Dateien hierher ziehen oder|Déposez vos fichiers ici ou|Arrastra archivos aquí o|Trascina qui i file o|Arraste ficheiros para aqui ou
+Drag files to a folder|Dateien auf einen Ordner ziehen|Déplacer des fichiers vers un dossier|Arrastra archivos a una carpeta|Trascina file in una cartella|Arrastar ficheiros para uma pasta
+Drop files to upload|Dateien zum Hochladen ablegen|Déposer les fichiers à envoyer|Suelta archivos para subirlos|Rilascia i file da caricare|Largar ficheiros para enviar
+Edit file|Datei bearbeiten|Modifier le fichier|Editar archivo|Modifica file|Editar ficheiro
+Empty all|Alles leeren|Tout vider|Vaciar todo|Svuota tutto|Esvaziar tudo
+Empty the entire trash? All items will be permanently deleted.|Gesamten Papierkorb leeren? Alle Elemente werden endgültig gelöscht.|Vider toute la corbeille ? Tous les éléments seront supprimés définitivement.|¿Vaciar toda la papelera? Todos los elementos se eliminarán permanentemente.|Svuotare tutto il cestino? Tutti gli elementi saranno eliminati definitivamente.|Esvaziar todo o lixo? Todos os itens serão eliminados permanentemente.
+Enable 2FA|2FA aktivieren|Activer la 2FA|Activar 2FA|Attiva 2FA|Ativar 2FA
+Enter the 6-digit code from your app|Sechsstelligen Code aus der App eingeben|Saisissez le code à 6 chiffres de votre application|Introduce el código de 6 dígitos de tu aplicación|Inserisci il codice a 6 cifre dell'app|Introduza o código de 6 dígitos da aplicação
+Enter the 6-digit code from your authenticator app.|Sechsstelligen Code aus deiner Authenticator-App eingeben.|Saisissez le code à 6 chiffres de votre application d'authentification.|Introduce el código de 6 dígitos de tu aplicación de autenticación.|Inserisci il codice a 6 cifre della tua app di autenticazione.|Introduza o código de 6 dígitos da aplicação de autenticação.
+Enter your 6-digit code|Sechsstelligen Code eingeben|Saisissez votre code à 6 chiffres|Introduce tu código de 6 dígitos|Inserisci il codice a 6 cifre|Introduza o código de 6 dígitos
+Enter your password|Passwort eingeben|Saisissez votre mot de passe|Introduce tu contraseña|Inserisci la password|Introduza a palavra-passe
+Enter your password to disable two-factor authentication.|Passwort eingeben, um die Zwei-Faktor-Authentifizierung zu deaktivieren.|Saisissez votre mot de passe pour désactiver la double authentification.|Introduce tu contraseña para desactivar la autenticación de dos factores.|Inserisci la password per disattivare l'autenticazione a due fattori.|Introduza a palavra-passe para desativar a autenticação de dois fatores.
+Expired|Abgelaufen|Expiré|Caducado|Scaduto|Expirado
+Expires in|Läuft ab in|Expire dans|Caduca en|Scade tra|Expira em
+Expiry|Gültigkeit|Expiration|Caducidad|Scadenza|Validade
+Extract ZIP|ZIP entpacken|Extraire le ZIP|Extraer ZIP|Estrai ZIP|Extrair ZIP
+Favorites|Favoriten|Favoris|Favoritos|Preferiti|Favoritos
+Favorites in this folder|Favoriten in diesem Ordner|Favoris dans ce dossier|Favoritos en esta carpeta|Preferiti in questa cartella|Favoritos nesta pasta
+Favorites on this page|Favoriten auf dieser Seite|Favoris sur cette page|Favoritos en esta página|Preferiti in questa pagina|Favoritos nesta página
+File|Datei|Fichier|Archivo|File|Ficheiro
+File browser|Dateibrowser|Explorateur de fichiers|Explorador de archivos|Esplora file|Explorador de ficheiros
+File information|Dateiinformationen|Informations du fichier|Información del archivo|Informazioni sul file|Informações do ficheiro
+File manager|Dateiverwaltung|Gestionnaire de fichiers|Gestor de archivos|Gestore di file|Gestor de ficheiros
+File name|Dateiname|Nom du fichier|Nombre del archivo|Nome del file|Nome do ficheiro
+File operation completed|Dateiaktion abgeschlossen|Opération terminée|Operación completada|Operazione completata|Operação concluída
+File renamed|Datei umbenannt|Fichier renommé|Archivo renombrado|File rinominato|Ficheiro renomeado
+Files|Dateien|Fichiers|Archivos|File|Ficheiros
+Fileship home|Fileship-Startseite|Accueil Fileship|Inicio de Fileship|Home di Fileship|Início do Fileship
+Filter current page|Aktuelle Seite filtern|Filtrer la page actuelle|Filtrar página actual|Filtra pagina corrente|Filtrar página atual
+Filter…|Filtern…|Filtrer…|Filtrar…|Filtra…|Filtrar…
+Fit image|Bild einpassen|Ajuster l'image|Ajustar imagen|Adatta immagine|Ajustar imagem
+Folder|Ordner|Dossier|Carpeta|Cartella|Pasta
+Folder information|Ordnerinformationen|Informations du dossier|Información de la carpeta|Informazioni sulla cartella|Informações da pasta
+Folder name|Ordnername|Nom du dossier|Nombre de la carpeta|Nome della cartella|Nome da pasta
+Folder path (empty = Home)|Ordnerpfad (leer = Startordner)|Chemin du dossier (vide = accueil)|Ruta de carpeta (vacío = inicio)|Percorso cartella (vuoto = home)|Caminho da pasta (vazio = início)
+Folders|Ordner|Dossiers|Carpetas|Cartelle|Pastas
+Generate link|Link erstellen|Générer un lien|Generar enlace|Genera link|Gerar ligação
+Generating…|Wird erstellt…|Génération…|Generando…|Generazione…|A gerar…
+Go|Öffnen|Ouvrir|Ir|Apri|Abrir
+Grid view|Kachelansicht|Vue en grille|Vista de cuadrícula|Vista griglia|Vista em grelha
+Hide dotfiles|Versteckte Dateien ausblenden|Masquer les fichiers cachés|Ocultar archivos ocultos|Nascondi file nascosti|Ocultar ficheiros ocultos
+Hide password|Passwort ausblenden|Masquer le mot de passe|Ocultar contraseña|Nascondi password|Ocultar palavra-passe
+Home|Startordner|Accueil|Inicio|Home|Início
+Images|Bilder|Images|Imágenes|Immagini|Imagens
+Indexing…|Wird indiziert…|Indexation…|Indexando…|Indicizzazione…|A indexar…
+Information|Informationen|Informations|Información|Informazioni|Informações
+Interface language|Sprache der Oberfläche|Langue de l'interface|Idioma de la interfaz|Lingua dell'interfaccia|Idioma da interface
+Invalid code|Ungültiger Code|Code invalide|Código no válido|Codice non valido|Código inválido
+Invalid code – try again|Ungültiger Code – erneut versuchen|Code invalide : réessayez|Código no válido: inténtalo de nuevo|Codice non valido: riprova|Código inválido: tente novamente
+Items are deleted permanently after 30 days|Elemente werden nach 30 Tagen endgültig gelöscht|Les éléments sont supprimés définitivement après 30 jours|Los elementos se eliminan permanentemente después de 30 días|Gli elementi vengono eliminati definitivamente dopo 30 giorni|Os itens são eliminados permanentemente após 30 dias
+Items copied to clipboard|Elemente zum Kopieren vorgemerkt|Éléments copiés dans le presse-papiers|Elementos copiados al portapapeles|Elementi copiati negli appunti|Itens copiados para a área de transferência
+Items ready to move|Elemente zum Verschieben vorgemerkt|Éléments prêts à déplacer|Elementos listos para mover|Elementi pronti da spostare|Itens prontos para mover
+Keyboard shortcuts|Tastaturkürzel|Raccourcis clavier|Atajos de teclado|Scorciatoie da tastiera|Atalhos de teclado
+Language|Sprache|Langue|Idioma|Lingua|Idioma
+Largest first|Größte zuerst|Plus volumineux d'abord|Más grandes primero|Più grandi prima|Maiores primeiro
+Last modified|Zuletzt geändert|Dernière modification|Última modificación|Ultima modifica|Última alteração
+Leave empty for no password|Leer lassen für Zugriff ohne Passwort|Laisser vide pour un accès sans mot de passe|Dejar vacío para acceso sin contraseña|Lascia vuoto per accesso senza password|Deixar vazio para acesso sem palavra-passe
+Link copied|Link kopiert|Lien copié|Enlace copiado|Link copiato|Ligação copiada
+Link copied to clipboard|Link in die Zwischenablage kopiert|Lien copié dans le presse-papiers|Enlace copiado al portapapeles|Link copiato negli appunti|Ligação copiada para a área de transferência
+Link ready|Link erstellt|Lien prêt|Enlace listo|Link pronto|Ligação pronta
+List view|Listenansicht|Vue en liste|Vista de lista|Vista elenco|Vista em lista
+Live|Live|En direct|En directo|In tempo reale|Em direto
+Live updates connected|Live-Aktualisierung verbunden|Mises à jour en direct connectées|Actualizaciones en directo conectadas|Aggiornamenti in tempo reale connessi|Atualizações em direto ligadas
+Live updates reconnecting|Live-Verbindung wird wiederhergestellt|Reconnexion des mises à jour en direct|Reconectando actualizaciones en directo|Riconnessione aggiornamenti in tempo reale|A restabelecer atualizações em direto
+Loading folders…|Ordner werden geladen…|Chargement des dossiers…|Cargando carpetas…|Caricamento cartelle…|A carregar pastas…
+Loading preview...|Vorschau wird geladen…|Chargement de l'aperçu…|Cargando vista previa…|Caricamento anteprima…|A carregar pré-visualização…
+Loading tokens…|Tokens werden geladen…|Chargement des jetons…|Cargando tokens…|Caricamento token…|A carregar tokens…
+Loading…|Wird geladen…|Chargement…|Cargando…|Caricamento…|A carregar…
+Login failed|Anmeldung fehlgeschlagen|Échec de la connexion|Error al iniciar sesión|Accesso non riuscito|Falha ao iniciar sessão
+Long-lived tokens for scripts and integrations. Prefix:|Dauerhafte Tokens für Skripte und Integrationen. Präfix:|Jetons durables pour les scripts et intégrations. Préfixe :|Tokens duraderos para scripts e integraciones. Prefijo:|Token duraturi per script e integrazioni. Prefisso:|Tokens duradouros para scripts e integrações. Prefixo:
+Main navigation|Hauptnavigation|Navigation principale|Navegación principal|Navigazione principale|Navegação principal
+Manage 2FA|2FA verwalten|Gérer la 2FA|Gestionar 2FA|Gestisci 2FA|Gerir 2FA
+Manage your workspace|Arbeitsbereich verwalten|Gérer votre espace|Gestionar tu espacio|Gestisci il tuo spazio|Gerir o seu espaço
+Manual entry key|Schlüssel für manuelle Eingabe|Clé de saisie manuelle|Clave de entrada manual|Chiave per inserimento manuale|Chave para introdução manual
+Member|Mitglied|Membre|Miembro|Membro|Membro
+Min 8 characters|Mindestens 8 Zeichen|Au moins 8 caractères|Mínimo 8 caracteres|Minimo 8 caratteri|Mínimo 8 caracteres
+More actions|Weitere Aktionen|Autres actions|Más acciones|Altre azioni|Mais ações
+Move|Verschieben|Déplacer|Mover|Sposta|Mover
+Move here|Hierher verschieben|Déplacer ici|Mover aquí|Sposta qui|Mover aqui
+Move items|Elemente verschieben|Déplacer les éléments|Mover elementos|Sposta elementi|Mover itens
+Move selected items to trash|Ausgewählte Elemente in den Papierkorb verschieben|Mettre les éléments sélectionnés à la corbeille|Mover elementos seleccionados a la papelera|Sposta gli elementi selezionati nel cestino|Mover itens selecionados para o lixo
+Move to trash|In den Papierkorb verschieben|Mettre à la corbeille|Mover a la papelera|Sposta nel cestino|Mover para o lixo
+Name|Name|Nom|Nombre|Nome|Nome
+Name A–Z|Name A–Z|Nom A–Z|Nombre A–Z|Nome A–Z|Nome A–Z
+Name Z–A|Name Z–A|Nom Z–A|Nombre Z–A|Nome Z–A|Nome Z–A
+Name your file|Dateinamen eingeben|Nommez votre fichier|Nombra tu archivo|Dai un nome al file|Dê um nome ao ficheiro
+Name your folder|Ordnernamen eingeben|Nommez votre dossier|Nombra tu carpeta|Dai un nome alla cartella|Dê um nome à pasta
+Never|Nie|Jamais|Nunca|Mai|Nunca
+Never expires|Ohne Ablaufdatum|N'expire jamais|Nunca caduca|Non scade|Nunca expira
+New file|Neue Datei|Nouveau fichier|Nuevo archivo|Nuovo file|Novo ficheiro
+New folder|Neuer Ordner|Nouveau dossier|Nueva carpeta|Nuova cartella|Nova pasta
+New password (min 8 chars)|Neues Passwort (mind. 8 Zeichen)|Nouveau mot de passe (8 caractères minimum)|Nueva contraseña (mín. 8 caracteres)|Nuova password (min. 8 caratteri)|Nova palavra-passe (mín. 8 caracteres)
+Newest first|Neueste zuerst|Plus récents d'abord|Más recientes primero|Più recenti prima|Mais recentes primeiro
+Next|Weiter|Suivant|Siguiente|Successivo|Seguinte
+Next page|Nächste Seite|Page suivante|Página siguiente|Pagina successiva|Página seguinte
+Next preview|Nächste Vorschau|Aperçu suivant|Vista previa siguiente|Anteprima successiva|Pré-visualização seguinte
+No expiry|Unbegrenzt gültig|Sans expiration|Sin caducidad|Senza scadenza|Sem validade
+No files found|Keine Dateien gefunden|Aucun fichier trouvé|No se encontraron archivos|Nessun file trovato|Nenhum ficheiro encontrado
+No limit|Unbegrenzt|Sans limite|Sin límite|Senza limite|Sem limite
+No password|Ohne Passwort|Sans mot de passe|Sin contraseña|Senza password|Sem palavra-passe
+No preview available|Keine Vorschau verfügbar|Aucun aperçu disponible|Vista previa no disponible|Anteprima non disponibile|Pré-visualização indisponível
+No rules — full access.|Keine Regeln – voller Zugriff.|Aucune règle : accès complet.|Sin reglas: acceso completo.|Nessuna regola: accesso completo.|Sem regras: acesso total.
+No shared links yet.|Noch keine Freigabe-Links.|Aucun lien partagé.|Aún no hay enlaces compartidos.|Nessun link condiviso.|Ainda não há ligações partilhadas.
+No subfolders on this page|Keine Unterordner auf dieser Seite|Aucun sous-dossier sur cette page|No hay subcarpetas en esta página|Nessuna sottocartella in questa pagina|Sem subpastas nesta página
+No tokens yet.|Noch keine Tokens.|Aucun jeton.|Aún no hay tokens.|Nessun token.|Ainda não há tokens.
+No users match this filter.|Keine Benutzer passen zu diesem Filter.|Aucun utilisateur ne correspond à ce filtre.|Ningún usuario coincide con este filtro.|Nessun utente corrisponde a questo filtro.|Nenhum utilizador corresponde a este filtro.
+Nothing here yet|Hier ist noch nichts|Rien ici pour le moment|Todavía no hay nada aquí|Non c'è ancora nulla|Ainda não há nada aqui
+Oldest first|Älteste zuerst|Plus anciens d'abord|Más antiguos primero|Più vecchi prima|Mais antigos primeiro
+Open files with a single click|Dateien mit einem Klick öffnen|Ouvrir les fichiers d'un simple clic|Abrir archivos con un clic|Apri file con un clic|Abrir ficheiros com um clique
+Open navigation|Navigation öffnen|Ouvrir la navigation|Abrir navegación|Apri navigazione|Abrir navegação
+Open parent folder|Übergeordneten Ordner öffnen|Ouvrir le dossier parent|Abrir carpeta superior|Apri cartella superiore|Abrir pasta superior
+Original size|Originalgröße|Taille originale|Tamaño original|Dimensione originale|Tamanho original
+Page|Seite|Page|Página|Pagina|Página
+Password|Passwort|Mot de passe|Contraseña|Password|Palavra-passe
+Password (min 8 chars)|Passwort (mind. 8 Zeichen)|Mot de passe (8 caractères minimum)|Contraseña (mín. 8 caracteres)|Password (min. 8 caratteri)|Palavra-passe (mín. 8 caracteres)
+Password changed|Passwort geändert|Mot de passe modifié|Contraseña cambiada|Password modificata|Palavra-passe alterada
+Password protected|Passwortgeschützt|Protégé par mot de passe|Protegido con contraseña|Protetto da password|Protegido por palavra-passe
+Password protection (optional)|Passwortschutz (optional)|Protection par mot de passe (facultative)|Protección con contraseña (opcional)|Protezione password (facoltativa)|Proteção por palavra-passe (opcional)
+Passwords do not match|Passwörter stimmen nicht überein|Les mots de passe ne correspondent pas|Las contraseñas no coinciden|Le password non corrispondono|As palavras-passe não coincidem
+Paste items|Elemente einfügen|Coller les éléments|Pegar elementos|Incolla elementi|Colar itens
+Path|Pfad|Chemin|Ruta|Percorso|Caminho
+Path (relative, e.g. projects/secret)|Pfad (relativ, z. B. projects/secret)|Chemin (relatif, ex. projects/secret)|Ruta (relativa, p. ej. projects/secret)|Percorso (relativo, es. projects/secret)|Caminho (relativo, ex. projects/secret)
+Path Permissions for|Pfadberechtigungen für|Autorisations des chemins pour|Permisos de ruta para|Permessi percorso per|Permissões de caminho para
+Path permissions|Pfadberechtigungen|Autorisations des chemins|Permisos de ruta|Permessi percorso|Permissões de caminho
+Path required|Pfad erforderlich|Chemin requis|Ruta obligatoria|Percorso obbligatorio|Caminho obrigatório
+People with this link will no longer have access.|Personen mit diesem Link haben danach keinen Zugriff mehr.|Les personnes disposant de ce lien n'auront plus accès.|Las personas con este enlace ya no tendrán acceso.|Le persone con questo link non avranno più accesso.|As pessoas com esta ligação deixarão de ter acesso.
+Per-User Disk Usage|Speicherverbrauch pro Benutzer|Espace utilisé par utilisateur|Espacio utilizado por usuario|Spazio utilizzato per utente|Espaço utilizado por utilizador
+Permanently delete this item? This cannot be undone.|Dieses Element endgültig löschen? Dies kann nicht rückgängig gemacht werden.|Supprimer cet élément définitivement ? Cette action est irréversible.|¿Eliminar este elemento permanentemente? Esta acción no se puede deshacer.|Eliminare questo elemento definitivamente? L'azione è irreversibile.|Eliminar este item permanentemente? Esta ação não pode ser anulada.
+Permission removed|Berechtigung entfernt|Autorisation supprimée|Permiso eliminado|Permesso rimosso|Permissão removida
+Permission saved|Berechtigung gespeichert|Autorisation enregistrée|Permiso guardado|Permesso salvato|Permissão guardada
+Permissions|Berechtigungen|Autorisations|Permisos|Permessi|Permissões
+Preferences are saved on this device.|Einstellungen werden auf diesem Gerät gespeichert.|Les préférences sont enregistrées sur cet appareil.|Las preferencias se guardan en este dispositivo.|Le preferenze sono salvate su questo dispositivo.|As preferências são guardadas neste dispositivo.
+Preparing…|Wird vorbereitet…|Préparation…|Preparando…|Preparazione…|A preparar…
+Preview|Vorschau|Aperçu|Vista previa|Anteprima|Pré-visualização
+Preview could not be loaded.|Vorschau konnte nicht geladen werden.|Impossible de charger l'aperçu.|No se pudo cargar la vista previa.|Impossibile caricare l'anteprima.|Não foi possível carregar a pré-visualização.
+Previous|Zurück|Précédent|Anterior|Precedente|Anterior
+Previous / next preview|Vorherige / nächste Vorschau|Aperçu précédent / suivant|Vista previa anterior / siguiente|Anteprima precedente / successiva|Pré-visualização anterior / seguinte
+Previous page|Vorherige Seite|Page précédente|Página anterior|Pagina precedente|Página anterior
+Previous preview|Vorherige Vorschau|Aperçu précédent|Vista previa anterior|Anteprima precedente|Pré-visualização anterior
+QUICK ACCESS|SCHNELLZUGRIFF|ACCÈS RAPIDE|ACCESO RÁPIDO|ACCESSO RAPIDO|ACESSO RÁPIDO
+Queued|Wartend|En attente|En cola|In coda|Em espera
+Quota|Speicherlimit|Quota|Cuota|Quota|Quota
+Quota & Allowed Types for|Speicherlimit und erlaubte Typen für|Quota et types autorisés pour|Cuota y tipos permitidos para|Quota e tipi consentiti per|Quota e tipos permitidos para
+Quota & Types|Speicherlimit und Typen|Quota et types|Cuota y tipos|Quota e tipi|Quota e tipos
+Quota (MB, 0 = unlimited)|Speicherlimit (MB, 0 = unbegrenzt)|Quota (Mo, 0 = illimité)|Cuota (MB, 0 = ilimitado)|Quota (MB, 0 = illimitato)|Quota (MB, 0 = ilimitado)
+Quota saved|Speicherlimit gespeichert|Quota enregistré|Cuota guardada|Quota salvata|Quota guardada
+Read|Lesen|Lire|Leer|Leggi|Ler
+Rebuild search index|Suchindex neu erstellen|Reconstruire l'index de recherche|Reconstruir índice de búsqueda|Ricostruisci indice di ricerca|Reconstruir índice de pesquisa
+Refresh all|Alles aktualisieren|Tout actualiser|Actualizar todo|Aggiorna tutto|Atualizar tudo
+Refresh folder|Ordner aktualisieren|Actualiser le dossier|Actualizar carpeta|Aggiorna cartella|Atualizar pasta
+Refreshed|Aktualisiert|Actualisé|Actualizado|Aggiornato|Atualizado
+Reload|Neu laden|Recharger|Recargar|Ricarica|Recarregar
+Remove from favorites|Aus Favoriten entfernen|Retirer des favoris|Quitar de favoritos|Rimuovi dai preferiti|Remover dos favoritos
+Rename|Umbenennen|Renommer|Renombrar|Rinomina|Renomear
+Rename file|Datei umbenennen|Renommer le fichier|Renombrar archivo|Rinomina file|Renomear ficheiro
+Rename selected item|Ausgewähltes Element umbenennen|Renommer l'élément sélectionné|Renombrar elemento seleccionado|Rinomina elemento selezionato|Renomear item selecionado
+Restore|Wiederherstellen|Restaurer|Restaurar|Ripristina|Restaurar
+Restore failed|Wiederherstellen fehlgeschlagen|Échec de la restauration|Error al restaurar|Ripristino non riuscito|Falha ao restaurar
+Restored|Wiederhergestellt|Restauré|Restaurado|Ripristinato|Restaurado
+Retry|Erneut versuchen|Réessayer|Reintentar|Riprova|Tentar novamente
+Revoke|Widerrufen|Révoquer|Revocar|Revoca|Revogar
+Revoke this shared link?|Diesen Freigabe-Link widerrufen?|Révoquer ce lien partagé ?|¿Revocar este enlace compartido?|Revocare questo link condiviso?|Revogar esta ligação partilhada?
+Revoke this token?|Diesen Token widerrufen?|Révoquer ce jeton ?|¿Revocar este token?|Revocare questo token?|Revogar este token?
+Root|Stammordner|Racine|Raíz|Radice|Raiz
+Root Path|Stammpfad|Chemin racine|Ruta raíz|Percorso radice|Caminho raiz
+Root path (e.g. /data/alice)|Stammpfad (z. B. /data/alice)|Chemin racine (ex. /data/alice)|Ruta raíz (p. ej. /data/alice)|Percorso radice (es. /data/alice)|Caminho raiz (ex. /data/alice)
+Rules restrict access to specific paths. Longest prefix wins.|Regeln beschränken den Zugriff auf Pfade. Die spezifischste Regel gilt.|Les règles limitent l'accès aux chemins. La règle la plus précise s'applique.|Las reglas restringen el acceso a rutas. Se aplica la regla más específica.|Le regole limitano l'accesso ai percorsi. Vale la regola più specifica.|As regras restringem o acesso a caminhos. Aplica-se a regra mais específica.
+Save|Speichern|Enregistrer|Guardar|Salva|Guardar
+Save (Ctrl+S)|Speichern (Strg+S)|Enregistrer (Ctrl+S)|Guardar (Ctrl+S)|Salva (Ctrl+S)|Guardar (Ctrl+S)
+Save failed|Speichern fehlgeschlagen|Échec de l'enregistrement|Error al guardar|Salvataggio non riuscito|Falha ao guardar
+Save in editor|Im Editor speichern|Enregistrer dans l'éditeur|Guardar en el editor|Salva nell'editor|Guardar no editor
+Save name|Namen speichern|Enregistrer le nom|Guardar nombre|Salva nome|Guardar nome
+Saved|Gespeichert|Enregistré|Guardado|Salvato|Guardado
+Saving…|Wird gespeichert…|Enregistrement…|Guardando…|Salvataggio…|A guardar…
+Search failed|Suche fehlgeschlagen|Échec de la recherche|Error en la búsqueda|Ricerca non riuscita|Falha na pesquisa
+Search files|Dateien suchen|Rechercher des fichiers|Buscar archivos|Cerca file|Pesquisar ficheiros
+Search indexing started|Indizierung gestartet|Indexation démarrée|Indexación iniciada|Indicizzazione avviata|Indexação iniciada
+Search results|Suchergebnisse|Résultats de recherche|Resultados de búsqueda|Risultati di ricerca|Resultados da pesquisa
+Search your files…|Dateien suchen…|Rechercher vos fichiers…|Buscar tus archivos…|Cerca i tuoi file…|Pesquisar ficheiros…
+Security|Sicherheit|Sécurité|Seguridad|Sicurezza|Segurança
+Select all visible files|Alle sichtbaren Dateien auswählen|Sélectionner tous les fichiers visibles|Seleccionar todos los archivos visibles|Seleziona tutti i file visibili|Selecionar todos os ficheiros visíveis
+Server unreachable|Server nicht erreichbar|Serveur inaccessible|Servidor inaccesible|Server non raggiungibile|Servidor inacessível
+Setting up…|Wird eingerichtet…|Configuration…|Configurando…|Configurazione…|A configurar…
+Settings|Einstellungen|Paramètres|Configuración|Impostazioni|Definições
+Setup failed|Einrichtung fehlgeschlagen|Échec de la configuration|Error al configurar|Configurazione non riuscita|Falha na configuração
+Share|Teilen|Partager|Compartir|Condividi|Partilhar
+Share URL|Freigabe-URL|URL de partage|URL compartida|URL condiviso|URL de partilha
+Share link|Freigabe-Link|Lien de partage|Enlace compartido|Link condiviso|Ligação partilhada
+Share revoked|Freigabe widerrufen|Partage révoqué|Enlace revocado|Condivisione revocata|Partilha revogada
+Shared links|Freigaben|Liens partagés|Enlaces compartidos|Link condivisi|Ligações partilhadas
+Show all files|Alle Dateien anzeigen|Afficher tous les fichiers|Mostrar todos los archivos|Mostra tutti i file|Mostrar todos os ficheiros
+Show exact dates and times|Datum und Uhrzeit genau anzeigen|Afficher la date et l'heure exactes|Mostrar fechas y horas exactas|Mostra date e ore esatte|Mostrar datas e horas exatas
+Show password|Passwort anzeigen|Afficher le mot de passe|Mostrar contraseña|Mostra password|Mostrar palavra-passe
+Sign in|Anmelden|Se connecter|Iniciar sesión|Accedi|Iniciar sessão
+Sign out|Abmelden|Se déconnecter|Cerrar sesión|Esci|Terminar sessão
+Signing in…|Anmeldung läuft…|Connexion…|Iniciando sesión…|Accesso…|A iniciar sessão…
+Size|Größe|Taille|Tamaño|Dimensione|Tamanho
+Smallest first|Kleinste zuerst|Plus petits d'abord|Más pequeños primero|Più piccoli prima|Menores primeiro
+Some uploads failed. See details below.|Einige Uploads sind fehlgeschlagen. Details siehe unten.|Certains envois ont échoué. Consultez les détails ci-dessous.|Algunas subidas fallaron. Consulta los detalles abajo.|Alcuni caricamenti non sono riusciti. Vedi i dettagli sotto.|Alguns envios falharam. Veja os detalhes abaixo.
+Something didn’t load|Laden fehlgeschlagen|Le chargement a échoué|No se pudo cargar|Caricamento non riuscito|Falha ao carregar
+Sort by|Sortieren nach|Trier par|Ordenar por|Ordina per|Ordenar por
+Sort files|Dateien sortieren|Trier les fichiers|Ordenar archivos|Ordina file|Ordenar ficheiros
+Star a file or folder to keep it close.|Dateien oder Ordner für den Schnellzugriff markieren.|Ajoutez un fichier ou dossier aux favoris pour y accéder rapidement.|Marca archivos o carpetas para acceder rápidamente.|Aggiungi file o cartelle ai preferiti per accedervi rapidamente.|Marque ficheiros ou pastas como favoritos para acesso rápido.
+Stats|Statistik|Statistiques|Estadísticas|Statistiche|Estatísticas
+Step 1 — Scan with your authenticator app|Schritt 1 – Mit Authenticator-App scannen|Étape 1 : scannez avec votre application|Paso 1: escanea con tu aplicación|Passo 1: scansiona con l'app|Passo 1: leia com a aplicação
+Step 2 — Enter the 6-digit code to confirm|Schritt 2 – Sechsstelligen Code bestätigen|Étape 2 : confirmez avec le code à 6 chiffres|Paso 2: confirma con el código de 6 dígitos|Passo 2: conferma con il codice a 6 cifre|Passo 2: confirme com o código de 6 dígitos
+Storage|Speicher|Stockage|Almacenamiento|Archiviazione|Armazenamento
+Storage used|Belegter Speicher|Stockage utilisé|Almacenamiento utilizado|Spazio utilizzato|Armazenamento utilizado
+Theme|Design|Thème|Tema|Tema|Tema
+Theme picker|Design auswählen|Choisir un thème|Elegir tema|Scegli tema|Escolher tema
+Time|Zeit|Heure|Hora|Ora|Hora
+Token created — copy it now, it won't be shown again!|Token erstellt – jetzt kopieren, er wird nicht erneut angezeigt!|Jeton créé : copiez-le maintenant, il ne sera plus affiché !|Token creado: ¡cópialo ahora, no se volverá a mostrar!|Token creato: copialo ora, non verrà più mostrato!|Token criado: copie-o agora, não será mostrado novamente!
+Token name (e.g. backup-script)|Tokenname (z. B. backup-script)|Nom du jeton (ex. backup-script)|Nombre del token (p. ej. backup-script)|Nome del token (es. backup-script)|Nome do token (ex. backup-script)
+Token name required|Tokenname erforderlich|Nom du jeton requis|Nombre del token obligatorio|Nome token obbligatorio|Nome do token obrigatório
+Token revoked|Token widerrufen|Jeton révoqué|Token revocado|Token revocato|Token revogado
+Total Disk Usage|Gesamter Speicherverbrauch|Espace total utilisé|Espacio total utilizado|Spazio totale utilizzato|Espaço total utilizado
+Total Users|Benutzer insgesamt|Total des utilisateurs|Total de usuarios|Totale utenti|Total de utilizadores
+Trash|Papierkorb|Corbeille|Papelera|Cestino|Lixo
+Trash emptied|Papierkorb geleert|Corbeille vidée|Papelera vaciada|Cestino svuotato|Lixo esvaziado
+Trash is empty|Papierkorb ist leer|La corbeille est vide|La papelera está vacía|Il cestino è vuoto|O lixo está vazio
+Try again|Erneut versuchen|Réessayer|Intentar de nuevo|Riprova|Tentar novamente
+Try another filter or a different page.|Anderen Filter oder andere Seite versuchen.|Essayez un autre filtre ou une autre page.|Prueba otro filtro u otra página.|Prova un altro filtro o un'altra pagina.|Tente outro filtro ou outra página.
+Two-Factor Authentication|Zwei-Faktor-Authentifizierung|Authentification à deux facteurs|Autenticación de dos factores|Autenticazione a due fattori|Autenticação de dois fatores
+Two-factor authentication|Zwei-Faktor-Authentifizierung|Authentification à deux facteurs|Autenticación de dos factores|Autenticazione a due fattori|Autenticação de dois fatores
+Two-factor authentication disabled|Zwei-Faktor-Authentifizierung deaktiviert|Double authentification désactivée|Autenticación de dos factores desactivada|Autenticazione a due fattori disattivata|Autenticação de dois fatores desativada
+Two-factor authentication enabled!|Zwei-Faktor-Authentifizierung aktiviert!|Double authentification activée !|¡Autenticación de dos factores activada!|Autenticazione a due fattori attivata!|Autenticação de dois fatores ativada!
+Type|Typ|Type|Tipo|Tipo|Tipo
+URI copied!|URI kopiert!|URI copié !|¡URI copiado!|URI copiato!|URI copiado!
+Upload area|Upload-Bereich|Zone d'envoi|Zona de subida|Area caricamento|Área de envio
+Upload cancelled|Upload abgebrochen|Envoi annulé|Subida cancelada|Caricamento annullato|Envio cancelado
+Upload failed|Upload fehlgeschlagen|Échec de l'envoi|Error de subida|Caricamento non riuscito|Falha no envio
+Upload files|Dateien hochladen|Envoyer des fichiers|Subir archivos|Carica file|Enviar ficheiros
+Upload folder|Ordner hochladen|Envoyer un dossier|Subir carpeta|Carica cartella|Enviar pasta
+Upload progress|Upload-Fortschritt|Progression de l'envoi|Progreso de subida|Avanzamento caricamento|Progresso do envio
+Upload summary|Upload-Übersicht|Résumé des envois|Resumen de subidas|Riepilogo caricamenti|Resumo dos envios
+Upload timed out|Upload-Zeitlimit überschritten|Délai d'envoi dépassé|Tiempo de subida agotado|Tempo di caricamento scaduto|Tempo de envio esgotado
+Upload to this folder|In diesen Ordner hochladen|Envoyer dans ce dossier|Subir a esta carpeta|Carica in questa cartella|Enviar para esta pasta
+Upload your first file or create a folder to get started.|Zum Start eine Datei hochladen oder einen Ordner erstellen.|Envoyez un fichier ou créez un dossier pour commencer.|Sube un archivo o crea una carpeta para empezar.|Carica un file o crea una cartella per iniziare.|Envie um ficheiro ou crie uma pasta para começar.
+Uploading to your workspace|Dateien werden hochgeladen|Envoi des fichiers en cours|Subiendo archivos|Caricamento dei file|A enviar ficheiros
+Usage|Verbrauch|Utilisation|Uso|Utilizzo|Utilização
+Use a name without slashes or control characters|Namen ohne Schrägstriche oder Steuerzeichen verwenden|Utilisez un nom sans barres obliques ni caractères de contrôle|Usa un nombre sin barras ni caracteres de control|Usa un nome senza barre o caratteri di controllo|Use um nome sem barras ou caracteres de controlo
+Use your Fileship username and password to authenticate.|Mit Fileship-Benutzernamen und Passwort anmelden.|Utilisez votre identifiant et mot de passe Fileship.|Usa tu usuario y contraseña de Fileship.|Usa nome utente e password Fileship.|Use o nome de utilizador e palavra-passe Fileship.
+Used|Belegt|Utilisé|Utilizado|Utilizzato|Utilizado
+User|Benutzer|Utilisateur|Usuario|Utente|Utilizador
+User created|Benutzer erstellt|Utilisateur créé|Usuario creado|Utente creato|Utilizador criado
+User deleted|Benutzer gelöscht|Utilisateur supprimé|Usuario eliminado|Utente eliminato|Utilizador eliminado
+Username|Benutzername|Identifiant|Nombre de usuario|Nome utente|Nome de utilizador
+Users|Benutzer|Utilisateurs|Usuarios|Utenti|Utilizadores
+Verify|Bestätigen|Vérifier|Verificar|Verifica|Verificar
+Verifying…|Wird geprüft…|Vérification…|Verificando…|Verifica…|A verificar…
+Video|Video|Vidéo|Vídeo|Video|Vídeo
+WebDAV Connection|WebDAV-Verbindung|Connexion WebDAV|Conexión WebDAV|Connessione WebDAV|Ligação WebDAV
+Working…|Wird verarbeitet…|Traitement…|Procesando…|Elaborazione…|A processar…
+Workspace navigation|Arbeitsbereich-Navigation|Navigation de l'espace|Navegación del espacio|Navigazione dello spazio|Navegação do espaço
+Write|Schreiben|Écrire|Escribir|Scrivi|Escrever
+You can restore these items from Trash for 30 days.|Diese Elemente können 30 Tage lang aus dem Papierkorb wiederhergestellt werden.|Ces éléments peuvent être restaurés depuis la corbeille pendant 30 jours.|Puedes restaurar estos elementos desde la papelera durante 30 días.|Puoi ripristinare questi elementi dal cestino per 30 giorni.|Pode restaurar estes itens do lixo durante 30 dias.
+You have unsaved changes. Leave anyway?|Es gibt ungespeicherte Änderungen. Trotzdem schließen?|Des modifications ne sont pas enregistrées. Quitter quand même ?|Hay cambios sin guardar. ¿Salir de todas formas?|Ci sono modifiche non salvate. Uscire comunque?|Existem alterações não guardadas. Sair na mesma?
+Your account is protected with two-factor authentication.|Dein Konto ist durch Zwei-Faktor-Authentifizierung geschützt.|Votre compte est protégé par la double authentification.|Tu cuenta está protegida con autenticación de dos factores.|Il tuo account è protetto dall'autenticazione a due fattori.|A sua conta está protegida por autenticação de dois fatores.
+Your files|Deine Dateien|Vos fichiers|Tus archivos|I tuoi file|Os seus ficheiros
+Your files. Your space.|Deine Dateien. Dein Speicher.|Vos fichiers. Votre espace.|Tus archivos. Tu espacio.|I tuoi file. Il tuo spazio.|Os seus ficheiros. O seu espaço.
+browse files|Dateien auswählen|sélectionner des fichiers|seleccionar archivos|scegli file|selecionar ficheiros
+d left|Tage verbleibend|jours restants|días restantes|giorni rimanenti|dias restantes
+e.g. image/,application/pdf,text/|z. B. image/,application/pdf,text/|ex. image/,application/pdf,text/|p. ej. image/,application/pdf,text/|es. image/,application/pdf,text/|ex. image/,application/pdf,text/
+items selected. Existing files will not be overwritten.|Elemente ausgewählt. Vorhandene Dateien werden nicht überschrieben.|éléments sélectionnés. Les fichiers existants ne seront pas écrasés.|elementos seleccionados. Los archivos existentes no se sobrescribirán.|elementi selezionati. I file esistenti non saranno sovrascritti.|itens selecionados. Os ficheiros existentes não serão substituídos.
+preview failed|Vorschau fehlgeschlagen|Échec de l'aperçu|Error de vista previa|Anteprima non riuscita|Falha na pré-visualização
+this item|dieses Element|cet élément|este elemento|questo elemento|este item
+to search|zum Suchen|pour rechercher|para buscar|per cercare|para pesquisar
+· Deleted|· Gelöscht|· Supprimé|· Eliminado|· Eliminato|· Eliminado
+· Expires|· Läuft ab|· Expire|· Caduca|· Scade|· Expira
+· Last used|· Zuletzt verwendet|· Dernière utilisation|· Último uso|· Ultimo utilizzo|· Última utilização
+· Never expires|· Ohne Ablaufdatum|· N'expire jamais|· Nunca caduca|· Non scade|· Nunca expira
+← Back to login|← Zurück zur Anmeldung|← Retour à la connexion|← Volver al inicio de sesión|← Torna all'accesso|← Voltar ao início de sessão
+ (first 200)| (erste 200)| (200 premiers)| (primeros 200)| (primi 200)| (primeiros 200)
+% used|% belegt|% utilisé|% utilizado|% utilizzato|% utilizado
+1 year|1 Jahr|1 an|1 año|1 anno|1 ano
+30 days|30 Tage|30 jours|30 días|30 giorni|30 dias
+90 days|90 Tage|90 jours|90 días|90 giorni|90 dias
+2FA Enabled!|2FA aktiviert!|2FA activée !|¡2FA activada!|2FA attivata!|2FA ativada!
+2FA is enabled|2FA ist aktiviert|La 2FA est activée|2FA está activada|2FA è attivata|2FA está ativada
+2FA is not enabled|2FA ist nicht aktiviert|La 2FA est désactivée|2FA está desactivada|2FA è disattivata|2FA está desativada
+A home for everything you’re working on.|Ein Ort für deine Dateien.|Un espace pour vos fichiers.|Un espacio para tus archivos.|Uno spazio per i tuoi file.|Um espaço para os seus ficheiros.
+A little extra protection for your workspace.|Zusätzlicher Schutz für deinen Arbeitsbereich.|Une protection supplémentaire pour votre espace.|Protección adicional para tu espacio.|Una protezione aggiuntiva per il tuo spazio.|Proteção adicional para o seu espaço.
+Add a second layer of security using a TOTP app like Google Authenticator, Authy, or 1Password.|Mehr Sicherheit mit einer TOTP-App wie Google Authenticator, Authy oder 1Password.|Renforcez la sécurité avec une application TOTP telle que Google Authenticator, Authy ou 1Password.|Añade seguridad con una aplicación TOTP como Google Authenticator, Authy o 1Password.|Aggiungi sicurezza con un'app TOTP come Google Authenticator, Authy o 1Password.|Reforce a segurança com uma aplicação TOTP como Google Authenticator, Authy ou 1Password.
+Add an extra layer of security using a TOTP authenticator app.|Zusätzlicher Schutz mit einer TOTP-Authenticator-App.|Ajoutez une protection avec une application d'authentification TOTP.|Añade protección con una aplicación de autenticación TOTP.|Aggiungi protezione con un'app di autenticazione TOTP.|Adicione proteção com uma aplicação de autenticação TOTP.
+Make room for your next idea|Platz für deine nächsten Dateien|De la place pour vos prochains fichiers|Espacio para tus próximos archivos|Spazio per i tuoi prossimi file|Espaço para os próximos ficheiros
+One more step.|Noch ein Schritt.|Encore une étape.|Un paso más.|Un altro passo.|Mais um passo.
+Open your TOTP app (Authy, Google Authenticator, 1Password, …) and add a new account. Use the manual entry if you can't scan a QR code.|Öffne deine TOTP-App (Authy, Google Authenticator, 1Password, …) und füge ein Konto hinzu. Nutze die manuelle Eingabe, falls du keinen QR-Code scannen kannst.|Ouvrez votre application TOTP (Authy, Google Authenticator, 1Password, …) et ajoutez un compte. Utilisez la saisie manuelle si vous ne pouvez pas scanner le QR code.|Abre tu aplicación TOTP (Authy, Google Authenticator, 1Password, …) y añade una cuenta. Usa la entrada manual si no puedes escanear el código QR.|Apri l'app TOTP (Authy, Google Authenticator, 1Password, …) e aggiungi un account. Usa l'inserimento manuale se non puoi scansionare il codice QR.|Abra a aplicação TOTP (Authy, Google Authenticator, 1Password, …) e adicione uma conta. Use a introdução manual se não conseguir ler o código QR.
+Or copy the full URI for manual import|Oder die vollständige URI zum manuellen Import kopieren|Ou copiez l'URI complet pour l'importer manuellement|O copia el URI completo para importarlo manualmente|Oppure copia l'URI completo per l'importazione manuale|Ou copie o URI completo para importar manualmente
+Save these backup codes in a safe place. Each can be used once if you lose access to your authenticator app.|Diese Wiederherstellungscodes sicher aufbewahren. Jeder Code kann einmal verwendet werden, wenn du keinen Zugriff mehr auf deine Authenticator-App hast.|Conservez ces codes de secours en lieu sûr. Chaque code peut être utilisé une fois si vous perdez l'accès à votre application d'authentification.|Guarda estos códigos de recuperación en un lugar seguro. Cada código puede usarse una vez si pierdes acceso a tu aplicación de autenticación.|Conserva questi codici di recupero in un luogo sicuro. Ogni codice può essere usato una volta se perdi l'accesso all'app di autenticazione.|Guarde estes códigos de recuperação num local seguro. Cada código pode ser usado uma vez se perder o acesso à aplicação de autenticação.
+Sign in to pick up where you left off.|Anmelden, um auf deine Dateien zuzugreifen.|Connectez-vous pour accéder à vos fichiers.|Inicia sesión para acceder a tus archivos.|Accedi per aprire i tuoi file.|Inicie sessão para aceder aos seus ficheiros.
+Welcome aboard.|Willkommen.|Bienvenue.|Bienvenido.|Benvenuto.|Bem-vindo.
+API Tokens|API-Tokens|Jetons API|Tokens de API|Token API|Tokens de API
+Library|Dateien|Fichiers|Archivos|File|Ficheiros
+Dark|Dunkel|Sombre|Oscuro|Scuro|Escuro
+Light|Hell|Clair|Claro|Chiaro|Claro
+Select {name}|{name} auswählen|Sélectionner {name}|Seleccionar {name}|Seleziona {name}|Selecionar {name}
+Star {name}|{name} als Favorit markieren|Ajouter {name} aux favoris|Añadir {name} a favoritos|Aggiungi {name} ai preferiti|Adicionar {name} aos favoritos
+Unstar {name}|{name} aus Favoriten entfernen|Retirer {name} des favoris|Quitar {name} de favoritos|Rimuovi {name} dai preferiti|Remover {name} dos favoritos
+Download {name}|{name} herunterladen|Télécharger {name}|Descargar {name}|Scarica {name}|Transferir {name}
+Actions for {name}|Aktionen für {name}|Actions pour {name}|Acciones para {name}|Azioni per {name}|Ações para {name}
+{extension} file|{extension}-Datei|Fichier {extension}|Archivo {extension}|File {extension}|Ficheiro {extension}
+Created “{name}”|„{name}“ erstellt|« {name} » créé|«{name}» creado|«{name}» creato|«{name}» criado
+Moved {count} items to trash|{count} Elemente in den Papierkorb verschoben|{count} éléments mis à la corbeille|{count} elementos movidos a la papelera|{count} elementi spostati nel cestino|{count} itens movidos para o lixo
+Move {count} items to trash?|{count} Elemente in den Papierkorb verschieben?|Mettre {count} éléments à la corbeille ?|¿Mover {count} elementos a la papelera?|Spostare {count} elementi nel cestino?|Mover {count} itens para o lixo?
+{count} selected|{count} ausgewählt|{count} sélectionnés|{count} seleccionados|{count} selezionati|{count} selecionados
+{count} items|{count} Elemente|{count} éléments|{count} elementos|{count} elementi|{count} itens
+{count} results|{count} Ergebnisse|{count} résultats|{count} resultados|{count} risultati|{count} resultados
+{type} on this page|{type} auf dieser Seite|{type} sur cette page|{type} en esta página|{type} in questa pagina|{type} nesta página
+{shown} of {total} items|{shown} von {total} Elementen|{shown} sur {total} éléments|{shown} de {total} elementos|{shown} di {total} elementi|{shown} de {total} itens
+{count} shown|{count} angezeigt|{count} affichés|{count} mostrados|{count} mostrati|{count} apresentados
+{count} days left|Noch {count} Tage|{count} jours restants|Quedan {count} días|{count} giorni rimanenti|Restam {count} dias
+Uploading {name}|{name} wird hochgeladen|Envoi de {name}|Subiendo {name}|Caricamento di {name}|A enviar {name}
+{count} files uploaded|{count} Dateien hochgeladen|{count} fichiers envoyés|{count} archivos subidos|{count} file caricati|{count} ficheiros enviados
+Server returned {status}|Server meldet {status}|Le serveur a renvoyé {status}|El servidor devolvió {status}|Il server ha restituito {status}|O servidor devolveu {status}
+{count} lines|{count} Zeilen|{count} lignes|{count} líneas|{count} righe|{count} linhas
+Could not load this folder|Ordner konnte nicht geladen werden|Impossible de charger ce dossier|No se pudo cargar esta carpeta|Impossibile caricare questa cartella|Não foi possível carregar esta pasta
+Invalid destination folder|Ungültiger Zielordner|Dossier de destination invalide|Carpeta de destino no válida|Cartella di destinazione non valida|Pasta de destino inválida
+Invalid operation|Ungültige Aktion|Opération invalide|Operación no válida|Operazione non valida|Operação inválida
+Choose a different destination|Anderes Ziel wählen|Choisissez une autre destination|Elige otro destino|Scegli un'altra destinazione|Escolha outro destino
+File already exists|Datei existiert bereits|Le fichier existe déjà|El archivo ya existe|Il file esiste già|O ficheiro já existe
+Permission denied|Zugriff verweigert|Accès refusé|Acceso denegado|Accesso negato|Acesso negado
+Storage quota exceeded|Speicherlimit überschritten|Quota de stockage dépassé|Cuota de almacenamiento superada|Quota di archiviazione superata|Quota de armazenamento excedida
+Invalid credentials|Ungültige Anmeldedaten|Identifiants invalides|Credenciales no válidas|Credenziali non valide|Credenciais inválidas
+File type not allowed|Dateityp nicht erlaubt|Type de fichier non autorisé|Tipo de archivo no permitido|Tipo di file non consentito|Tipo de ficheiro não permitido
+Request failed|Anfrage fehlgeschlagen|Échec de la requête|Error de solicitud|Richiesta non riuscita|Falha no pedido
+New destination folder|Neuen Zielordner erstellen|Nouveau dossier de destination|Nueva carpeta de destino|Nuova cartella di destinazione|Nova pasta de destino
+Gallery view|Galerieansicht|Vue galerie|Vista de galería|Vista galleria|Vista de galeria
+Show upload area|Upload-Bereich anzeigen|Afficher la zone d'envoi|Mostrar zona de subida|Mostra area caricamento|Mostrar área de envio
+Hide upload area|Upload-Bereich ausblenden|Masquer la zone d'envoi|Ocultar zona de subida|Nascondi area caricamento|Ocultar área de envio
+{count} actions failed|{count} Aktionen fehlgeschlagen|{count} opérations ont échoué|{count} operaciones fallaron|{count} operazioni non riuscite|{count} operações falharam
+No matches for “{query}”. Try another name.|Keine Treffer für „{query}“. Anderen Namen versuchen.|Aucun résultat pour « {query} ». Essayez un autre nom.|Sin resultados para «{query}». Prueba otro nombre.|Nessun risultato per «{query}». Prova un altro nome.|Sem resultados para «{query}». Tente outro nome.
+The action could not be completed|Aktion konnte nicht abgeschlossen werden|L'opération n'a pas pu être terminée|No se pudo completar la acción|Impossibile completare l'azione|Não foi possível concluir a ação
+Download failed|Download fehlgeschlagen|Échec du téléchargement|Error de descarga|Download non riuscito|Falha na transferência
+Download archive|Archiv herunterladen|Télécharger une archive|Descargar archivo comprimido|Scarica archivio|Transferir arquivo
+Archive format|Archivformat|Format d'archive|Formato de archivo|Formato archivio|Formato do arquivo
+Formatted preview|Formatierte Vorschau|Aperçu formaté|Vista previa con formato|Anteprima formattata|Pré-visualização formatada
+Source text|Quelltext|Texte source|Texto fuente|Testo sorgente|Texto fonte
+Dimensions|Abmessungen|Dimensions|Dimensiones|Dimensioni|Dimensões
+Toggle selection|Auswahl umschalten|Basculer la sélection|Alternar selección|Attiva o disattiva selezione|Alternar seleção
+Select a range|Bereich auswählen|Sélectionner une plage|Seleccionar un rango|Seleziona un intervallo|Selecionar um intervalo
+Ocean|Ozean|Océan|Océano|Oceano|Oceano
+Violet|Violett|Violet|Violeta|Viola|Violeta
+Choose your design. Changes are saved automatically.|Wähle dein Design. Änderungen werden automatisch gespeichert.|Choisissez votre thème. Les modifications sont enregistrées automatiquement.|Elige tu diseño. Los cambios se guardan automáticamente.|Scegli il tuo tema. Le modifiche vengono salvate automaticamente.|Escolha o seu tema. As alterações são guardadas automaticamente.
+Skip to files|Zu den Dateien springen|Aller aux fichiers|Saltar a los archivos|Vai ai file|Ir para os ficheiros
+This folder is empty|Dieser Ordner ist leer|Ce dossier est vide|Esta carpeta está vacía|Questa cartella è vuota|Esta pasta está vazia
+{count} item|{count} Element|{count} élément|{count} elemento|{count} elemento|{count} item
+{count} result|{count} Ergebnis|{count} résultat|{count} resultado|{count} risultato|{count} resultado
+Quick access|Schnellzugriff|Accès rapide|Acceso rápido|Accesso rapido|Acesso rápido
+Edit|Bearbeiten|Modifier|Editar|Modifica|Editar

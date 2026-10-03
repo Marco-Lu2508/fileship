@@ -1,4 +1,10 @@
 <script>
+  import {
+    locale,
+    languages,
+    translateError,
+    translator as i18n
+  } from '../stores/i18n.js'
   import { login, verify2FA, twoFAPending } from '../stores/auth.js'
   import Icon from './Icon.svelte'
 
@@ -17,7 +23,7 @@
       await login(username.trim(), password)
       // 2FA flow: twoFAPending store wird gesetzt, UI wechselt
     } catch (e) {
-      errorMsg = e.message || 'Login failed'
+      errorMsg = translateError(e.message) || $i18n('Login failed')
     } finally {
       loading = false
     }
@@ -26,7 +32,7 @@
   async function handle2FA() {
     if (loading) return
     if (!twoFACode.trim()) {
-      errorMsg = 'Enter your 6-digit code'
+      errorMsg = $i18n('Enter your 6-digit code')
       return
     }
     errorMsg = ''
@@ -35,7 +41,7 @@
       const pending = $twoFAPending
       await verify2FA(pending.pending_token, twoFACode.trim())
     } catch (e) {
-      errorMsg = e.message || 'Invalid code'
+      errorMsg = translateError(e.message) || $i18n('Invalid code')
     } finally {
       loading = false
     }
@@ -52,18 +58,25 @@
       </div>
       <div class="brand-text">
         <span class="brand-name">Fileship</span>
-        <span class="brand-sub">Your files. Your space.</span>
+        <span class="brand-sub">{$i18n('Your files. Your space.')}</span>
       </div>
     </div>
 
     <div class="welcome">
-      <h1>{is2FAStep ? 'One more step.' : 'Welcome aboard.'}</h1>
+      <h1>{is2FAStep ? $i18n('One more step.') : $i18n('Welcome aboard.')}</h1>
       <p>
         {is2FAStep
-          ? 'A little extra protection for your workspace.'
-          : 'Sign in to pick up where you left off.'}
+          ? $i18n('A little extra protection for your workspace.')
+          : $i18n('Sign in to pick up where you left off.')}
       </p>
     </div>
+    <label class="login-language"
+      ><span>{$i18n('Language')}</span><select bind:value={$locale}
+        >{#each languages as language}<option value={language.id}
+            >{language.name}</option
+          >{/each}</select
+      ></label
+    >
     <form
       onsubmit={(e) => {
         e.preventDefault()
@@ -75,12 +88,14 @@
         <div class="twofa-header">
           <span class="twofa-icon"><Icon name="lock" size={18} /></span>
           <div>
-            <strong>Two-factor authentication</strong>
-            <p>Enter the 6-digit code from your authenticator app.</p>
+            <strong>{$i18n('Two-factor authentication')}</strong>
+            <p>
+              {$i18n('Enter the 6-digit code from your authenticator app.')}
+            </p>
           </div>
         </div>
         <div class="field">
-          <label for="twofa-code">Authentication code</label>
+          <label for="twofa-code">{$i18n('Authentication code')}</label>
           <input
             id="twofa-code"
             type="text"
@@ -88,7 +103,7 @@
             bind:value={twoFACode}
             autocomplete="one-time-code"
             required
-            placeholder="Code or backup code"
+            placeholder={$i18n('Code or backup code')}
             class="code-input"
           />
         </div>
@@ -98,8 +113,8 @@
           </div>
         {/if}
         <button type="submit" class="submit-btn" disabled={loading}>
-          {#if loading}<span class="btn-spinner"></span> Verifying…
-          {:else}Verify{/if}
+          {#if loading}<span class="btn-spinner"></span> {$i18n('Verifying…')}
+          {:else}{$i18n('Verify')}{/if}
         </button>
         <button
           type="button"
@@ -111,12 +126,12 @@
             twoFACode = ''
           }}
         >
-          ← Back to login
+          {$i18n('← Back to login')}
         </button>
       {:else}
         <!-- Normal login -->
         <div class="field">
-          <label for="username">Username</label>
+          <label for="username">{$i18n('Username')}</label>
           <div class="input-wrap">
             <span class="input-icon"><Icon name="user" size={14} /></span>
             <input
@@ -130,7 +145,7 @@
           </div>
         </div>
         <div class="field">
-          <label for="password">Password</label>
+          <label for="password">{$i18n('Password')}</label>
           <div class="input-wrap">
             <span class="input-icon"><Icon name="lock" size={14} /></span>
             <input
@@ -145,7 +160,9 @@
               type="button"
               class="pw-toggle"
               onclick={() => (showPw = !showPw)}
-              aria-label={showPw ? 'Hide password' : 'Show password'}
+              aria-label={showPw
+                ? $i18n('Hide password')
+                : $i18n('Show password')}
               aria-pressed={showPw}
             >
               <Icon name={showPw ? 'eye_off' : 'eye'} size={14} />
@@ -158,17 +175,34 @@
           </div>
         {/if}
         <button type="submit" class="submit-btn" disabled={loading}>
-          {#if loading}<span class="btn-spinner"></span> Signing in…
-          {:else}Sign in{/if}
+          {#if loading}<span class="btn-spinner"></span> {$i18n('Signing in…')}
+          {:else}{$i18n('Sign in')}{/if}
         </button>
       {/if}
     </form>
   </div>
 
-  <p class="footer-note">A home for everything you’re working on.</p>
+  <p class="footer-note">{$i18n('A home for everything you’re working on.')}</p>
 </div>
 
 <style>
+  .login-language {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 20px;
+    color: var(--text2);
+    font-size: 12px;
+  }
+  .login-language select {
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font: inherit;
+  }
   .wrap {
     min-height: 100vh;
     display: flex;
@@ -218,7 +252,7 @@
     background: var(--sidebar-bg);
     display: grid;
     place-items: center;
-    color: #b9d99e;
+    color: var(--sidebar-active);
     flex-shrink: 0;
     box-shadow: none;
   }
@@ -270,8 +304,8 @@
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--text2);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    text-transform: none;
+    letter-spacing: 0;
   }
 
   .input-wrap {
@@ -355,7 +389,7 @@
     width: 100%;
     padding: 0.7rem;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border: none;
     border-radius: var(--radius);
     font-size: 0.9rem;
@@ -391,7 +425,7 @@
     width: 14px;
     height: 14px;
     border: 2px solid rgba(255, 255, 255, 0.4);
-    border-top-color: #fff;
+    border-top-color: var(--on-accent);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
   }
@@ -422,7 +456,7 @@
     height: 36px;
     border-radius: var(--radius);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     display: grid;
     place-items: center;
     flex-shrink: 0;

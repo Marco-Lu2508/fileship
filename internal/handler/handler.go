@@ -52,6 +52,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Use(authMW)
 
 		r.Get("/api/files", h.listFiles)
+		r.Get("/api/files/info", h.fileInfo)
 		r.Post("/api/files/upload", h.uploadFile)
 		r.Delete("/api/files", h.deleteFile)
 		r.Post("/api/files/mkdir", h.mkdir)
@@ -61,6 +62,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/api/files/download", h.downloadFile)
 		r.Get("/api/files/preview", h.previewFile)
 		r.Post("/api/files/zip-multi", h.zipMulti)
+		r.Post("/api/files/archive", h.downloadArchive)
 		r.Get("/api/files/zip", h.zipDir)
 		r.Post("/api/files/move", h.moveFile)
 		r.Get("/api/files/search", h.searchFiles)
@@ -499,6 +501,12 @@ func (h *Handler) renameFile(w http.ResponseWriter, r *http.Request) {
 	if !h.checkPerm(w, r, body.Old, "write") {
 		return
 	}
+	if !h.checkPerm(w, r, body.New, "write") {
+		return
+	}
+	if !h.checkTransfer(w, r, body.Old, body.New, true) {
+		return
+	}
 	claims, _ := h.claimsUser(r)
 	if err := fsvc.Rename(h.userRoot(r), body.Old, body.New); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -545,11 +553,7 @@ func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) zipDir(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="download.zip"`)
-	if err := fsvc.ZipDir(h.userRoot(r), path, w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	h.serveArchive(w, r, []string{path}, "zip")
 }
 
 // --- Me ---

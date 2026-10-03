@@ -3,6 +3,7 @@
 </script>
 
 <script>
+  import { locale, translator as i18n } from '../stores/i18n.js'
   import { tick } from 'svelte'
   import { get } from 'svelte/store'
   import {
@@ -16,13 +17,22 @@
   import { addFavorite, removeFavorite } from '../stores/favorites.js'
   import { fileKind, formatBytes, validName } from '../lib/files.js'
   import Icon from './Icon.svelte'
+  import { preferences } from '../stores/preferences.js'
+  import { accessToken } from '../stores/auth.js'
   export let file
   export let showPath = false
+  export let gallery = false,
+    onSelect = null
+  let thumbnailFailed = false
   export let onPreview = () => {},
     onShare = () => {},
     onEdit = () => {},
     onUnzip = () => {},
-    onDelete = () => {}
+    onDelete = () => {},
+    onCopy = () => {},
+    onMove = () => {},
+    onInfo = () => {},
+    onArchive = () => {}
   export let onNavigate = (path) => loadFiles(path),
     onDragOver = () => {},
     onDrop = () => {},
@@ -35,6 +45,17 @@
     menuX = 0,
     menuY = 0
   const menuId = `file-menu-${++nextMenuId}`
+  function registerRename(node) {
+    node.addEventListener('rename-item', startRename)
+    return {
+      destroy() {
+        node.removeEventListener('rename-item', startRename)
+      }
+    }
+  }
+  function openFile() {
+    file.is_dir ? onNavigate(file.path) : onPreview(file)
+  }
 
   async function startRename() {
     menu?.hidePopover()
@@ -48,7 +69,7 @@
     if (saving) return
     const name = newName.trim()
     if (!validName(name)) {
-      error('Use a name without slashes or control characters')
+      error($i18n('Use a name without slashes or control characters'))
       return
     }
     if (name === file.name) {
@@ -62,7 +83,7 @@
         : ''
       await renameFile(file.path, parent ? `${parent}/${name}` : name)
       renaming = false
-      success('File renamed')
+      success($i18n('File renamed'))
       await loadFiles(get(currentPath))
     } catch (err) {
       error(err.message)
@@ -80,6 +101,10 @@
   }
   async function download() {
     menu?.hidePopover()
+    if (file.is_dir) {
+      onArchive(file)
+      return
+    }
     try {
       await downloadFile(file.path, file.is_dir)
     } catch (err) {
@@ -93,20 +118,25 @@
   function positionMenu(event) {
     const box = event.currentTarget.getBoundingClientRect()
     menuX = Math.max(8, Math.min(box.right - 190, innerWidth - 198))
-    menuY = Math.max(8, Math.min(box.bottom + 5, innerHeight - 340))
+    menuY = Math.max(8, Math.min(box.bottom + 5, innerHeight - 440))
   }
-  function toggleSelect() {
+  function toggleSelect(event) {
+    if (onSelect) {
+      onSelect(file, event)
+      return
+    }
     selected.update((set) => {
       const next = new Set(set)
       next.has(file.path) ? next.delete(file.path) : next.add(file.path)
       return next
     })
   }
-  function dateLabel(value) {
+  function dateLabel(value, language) {
     if (!value) return '—'
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return '—'
-    return date.toLocaleDateString(undefined, {
+    if ($preferences.exactDates) return date.toLocaleString(language)
+    return date.toLocaleDateString(language, {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -121,36 +151,53 @@
     )
   $: isZip = /\.zip$/i.test(file.name)
   $: typeLabel = file.is_dir
-    ? 'Folder'
+    ? $i18n('Folder')
     : file.name.includes('.')
-      ? `${file.name.split('.').pop().toUpperCase()} file`
-      : 'File'
+      ? $i18n('{extension} file', {
+          extension: file.name.split('.').pop().toUpperCase()
+        })
+      : $i18n('File')
 </script>
 
 <tr
+  data-file-path={file.path}
+  use:registerRename
   class="row"
   class:selected={isSelected}
   class:drag-over={file.is_dir && dragOverPath === file.path}
   draggable={!renaming}
   ondragstart={(e) => {
     e.dataTransfer.setData('fileship/path', file.path)
-    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData(
+      'fileship/paths',
+      JSON.stringify(isSelected ? [...$selected] : [file.path])
+    )
+    e.dataTransfer.effectAllowed = 'copyMove'
   }}
   ondragover={(e) => file.is_dir && onDragOver(e, file.path)}
   ondragleave={() => (dragOverPath = null)}
   ondrop={(e) => file.is_dir && onDrop(e, file.path)}
 >
   <td class="col-check"
-    ><input
-      type="checkbox"
-      onchange={toggleSelect}
-      checked={isSelected}
-      aria-label={`Select ${file.name}`}
-    /></td
+    ><label class="select-file"
+      ><input
+        type="checkbox"
+        onclick={toggleSelect}
+        checked={isSelected}
+        aria-label={$i18n('Select {name}', { name: file.name })}
+      /></label
+    ></td
   >
   <td class="col-name"
-    ><span class="file-icon-wrap kind-{kind}"
-      ><Icon name={kind} size={19} /></span
+    ><span
+      class="file-icon-wrap kind-{kind}"
+      class:thumbnail={gallery && kind === 'image' && !thumbnailFailed}
+      >{#if gallery && kind === 'image' && !thumbnailFailed}<img
+          loading="lazy"
+          src={`/api/files/thumb?${new URLSearchParams({ path: file.path, access_token: $accessToken })}`}
+          alt=""
+          onerror={() => (thumbnailFailed = true)}
+        />{:else}<Icon name={kind} size={19} />{/if}</span
     >{#if renaming}<form
         class="rename-form"
         onsubmit={(e) => {
@@ -162,25 +209,32 @@
           class="rename-input"
           bind:this={renameInput}
           bind:value={newName}
-          aria-label="Rename file"
+          aria-label={$i18n('Rename file')}
           onkeydown={(e) => {
             if (e.key === 'Escape') {
               e.stopPropagation()
               renaming = false
             }
           }}
-        /><button class="act" disabled={saving} aria-label="Save name"
+        /><button class="act" disabled={saving} aria-label={$i18n('Save name')}
           ><Icon name="check" size={16} /></button
         ><button
           type="button"
           class="act"
-          aria-label="Cancel rename"
+          aria-label={$i18n('Cancel rename')}
           onclick={() => (renaming = false)}><Icon name="x" size={16} /></button
         >
       </form>{:else}<button
         class="name-btn"
         title={file.path}
-        onclick={() => (file.is_dir ? onNavigate(file.path) : onPreview(file))}
+        onclick={(e) => {
+          if (e.ctrlKey || e.metaKey || e.shiftKey) toggleSelect(e)
+          else if (e.detail === 0 || $preferences.singleClick) openFile()
+          else if (e.detail === 1) toggleSelect(e)
+        }}
+        ondblclick={() => {
+          if (!$preferences.singleClick) openFile()
+        }}
         ><span class="name-text">{file.name}</span><span class="type-label"
           >{showPath ? file.path : typeLabel}</span
         ></button
@@ -189,12 +243,14 @@
   <td class="col-size"
     >{file.is_dir
       ? file.dir_size > 0
-        ? formatBytes(file.dir_size)
+        ? formatBytes(file.dir_size, $locale)
         : '—'
-      : formatBytes(file.size)}</td
+      : formatBytes(file.size, $locale)}</td
   ><td class="col-date"
-    ><span title={file.mod_time ? new Date(file.mod_time).toLocaleString() : ''}
-      >{dateLabel(file.mod_time)}</span
+    ><span
+      title={file.mod_time
+        ? new Date(file.mod_time).toLocaleString($locale)
+        : ''}>{dateLabel(file.mod_time, $locale)}</span
     ></td
   >
   <td class="col-actions"
@@ -203,21 +259,24 @@
         class="act star"
         class:starred={file.starred}
         onclick={toggleFavorite}
-        aria-label={file.starred ? `Unstar ${file.name}` : `Star ${file.name}`}
-        title={file.starred ? 'Remove from favorites' : 'Add to favorites'}
-        ><Icon name="star" size={16} /></button
+        aria-label={file.starred
+          ? $i18n('Unstar {name}', { name: file.name })
+          : $i18n('Star {name}', { name: file.name })}
+        title={file.starred
+          ? $i18n('Remove from favorites')
+          : $i18n('Add to favorites')}><Icon name="star" size={16} /></button
       ><button
         class="act download"
         onclick={download}
-        aria-label={`Download ${file.name}`}
-        title={file.is_dir ? 'Download as ZIP' : 'Download'}
+        aria-label={$i18n('Download {name}', { name: file.name })}
+        title={file.is_dir ? $i18n('Download archive') : $i18n('Download')}
         ><Icon name="download" size={16} /></button
       ><button
         class="act"
         popovertarget={menuId}
         onclick={positionMenu}
-        aria-label={`Actions for ${file.name}`}
-        title="More actions"><Icon name="more" size={18} /></button
+        aria-label={$i18n('Actions for {name}', { name: file.name })}
+        title={$i18n('More actions')}><Icon name="more" size={18} /></button
       >
     </div>
     <div
@@ -226,30 +285,53 @@
       popover
       class="row-menu"
       style={`left:${menuX}px;top:${menuY}px`}
-      aria-label={`Actions for ${file.name}`}
+      aria-label={$i18n('Actions for {name}', { name: file.name })}
     >
       {#if !file.is_dir}<button onclick={() => action(onPreview)}
-          ><Icon name="eye" size={16} />Preview</button
+          ><Icon name="eye" size={16} />{$i18n('Preview')}</button
         >{/if}<button onclick={download}
         ><Icon name="download" size={16} />{file.is_dir
-          ? 'Download ZIP'
-          : 'Download'}</button
+          ? $i18n('Download ZIP')
+          : $i18n('Download')}</button
       >{#if isText}<button onclick={() => action(onEdit)}
-          ><Icon name="edit" size={16} />Edit file</button
+          ><Icon name="edit" size={16} />{$i18n('Edit file')}</button
         >{/if}{#if isZip}<button onclick={() => action(onUnzip)}
-          ><Icon name="extract" size={16} />Extract ZIP</button
+          ><Icon name="extract" size={16} />{$i18n('Extract ZIP')}</button
         >{/if}<button onclick={() => action(onShare)}
-        ><Icon name="share" size={16} />Share link</button
+        ><Icon name="share" size={16} />{$i18n('Share link')}</button
       ><button onclick={startRename}
-        ><Icon name="rename" size={16} />Rename</button
+        ><Icon name="rename" size={16} />{$i18n('Rename')}</button
+      ><button onclick={() => action(onCopy)}
+        ><Icon name="copy" size={16} />{$i18n('Copy')}</button
+      ><button onclick={() => action(onMove)}
+        ><Icon name="move" size={16} />{$i18n('Move')}</button
+      ><button onclick={() => action(onInfo)}
+        ><Icon name="info" size={16} />{$i18n('Information')}</button
       ><button class="danger" onclick={() => action(onDelete)}
-        ><Icon name="trash" size={16} />Move to trash</button
+        ><Icon name="trash" size={16} />{$i18n('Move to trash')}</button
       >
     </div></td
   >
 </tr>
 
 <style>
+  .select-file {
+    display: grid;
+    place-items: center;
+    min-height: 36px;
+    cursor: pointer;
+  }
+  .file-icon-wrap.thumbnail {
+    width: 100%;
+    height: 130px;
+    background: var(--surface2);
+    overflow: hidden;
+  }
+  .thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
   .row {
     border-bottom: 1px solid var(--border2);
     transition: background 0.15s;
@@ -329,7 +411,7 @@
     cursor: pointer;
   }
   .name-text {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     max-width: 100%;
     overflow: hidden;
@@ -340,14 +422,15 @@
     color: var(--accent);
   }
   .type-label {
-    font-size: 9px;
+    font-size: 12px;
     color: var(--text3);
   }
   .col-size,
   .col-date {
     color: var(--text2);
-    font-size: 10px;
+    font-size: 12px;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .action-group {
     display: flex;
@@ -400,7 +483,7 @@
     gap: 9px;
     width: 100%;
     padding: 10px;
-    font-size: 12px;
+    font-size: 14px;
     background: none;
     color: var(--text);
     border: 0;
@@ -431,7 +514,7 @@
     border: 1px solid var(--accent);
     border-radius: 6px;
     padding: 7px;
-    font-size: 12px;
+    font-size: 14px;
   }
   @media (hover: none) {
     .download {
@@ -465,10 +548,10 @@
       padding: 6px;
     }
     .name-text {
-      max-width: 40vw;
+      max-width: 100%;
     }
     .type-label {
-      font-size: 8px;
+      font-size: 11px;
     }
   }
 </style>

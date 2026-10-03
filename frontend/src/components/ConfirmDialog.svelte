@@ -1,15 +1,22 @@
 <script>
+  import { translator as i18n } from '../stores/i18n.js'
   import { onMount } from 'svelte'
   import Icon from './Icon.svelte'
   export let title
   export let description
-  export let confirmLabel = 'Confirm'
+  export let confirmLabel = $i18n('Confirm')
   export let busy = false
+  export let busyLabel = $i18n('Working…')
   export let onConfirm = () => {}
   export let onClose = () => {}
   let dialog
   onMount(() => {
+    const opener = document.activeElement
     dialog.showModal()
+    return () => {
+      dialog.close()
+      if (opener?.isConnected) opener.focus()
+    }
   })
 </script>
 
@@ -26,10 +33,10 @@
   <h2 id="confirm-title">{title}</h2>
   <p id="confirm-description">{description}</p>
   <div class="buttons">
-    <button disabled={busy} onclick={onClose}>Cancel</button><button
+    <button disabled={busy} onclick={onClose}>{$i18n('Cancel')}</button><button
       class="confirm"
       disabled={busy}
-      onclick={onConfirm}>{busy ? 'Moving…' : confirmLabel}</button
+      onclick={onConfirm}>{busy ? busyLabel : confirmLabel}</button
     >
   </div>
 </dialog>
@@ -90,7 +97,7 @@
   button.confirm {
     background: var(--danger);
     border-color: var(--danger);
-    color: white;
+    color: var(--on-danger);
   }
   button:disabled {
     opacity: 0.6;

@@ -1,4 +1,5 @@
 <script>
+  import { locale, translator as i18n } from '../stores/i18n.js'
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import {
@@ -17,7 +18,7 @@
   import { connectWS, disconnectWS, connection } from '../stores/ws.js'
   import { success, error } from '../stores/toast.js'
   import { favorites, loadFavorites } from '../stores/favorites.js'
-  import { fileKind, validName, requireOK, saveDownload } from '../lib/files.js'
+  import { fileKind, formatBytes, validName, requireOK } from '../lib/files.js'
   import Breadcrumb from './Breadcrumb.svelte'
   import Dropzone from './Dropzone.svelte'
   import FileRow from './FileRow.svelte'
@@ -31,6 +32,83 @@
   import Trash from './Trash.svelte'
   import Icon from './Icon.svelte'
   import ConfirmDialog from './ConfirmDialog.svelte'
+  import TransferDialog from './TransferDialog.svelte'
+  import Properties from './Properties.svelte'
+  import Shares from './Shares.svelte'
+  import Help from './Help.svelte'
+  import DownloadDialog from './DownloadDialog.svelte'
+  import { preferences } from '../stores/preferences.js'
+  import { transferFiles } from '../lib/operations.js'
+
+  let transfer = null,
+    clipboard = null,
+    infoPath = null,
+    showShares = false,
+    showHelp = false
+  let storage = null
+  let showUpload = false,
+    uploadDragging = false,
+    selectionAnchor = null
+  let archivePaths = null
+  function selectFile(file, event) {
+    selected.update((current) => {
+      const next = new Set(current)
+      if (event?.shiftKey && selectionAnchor) {
+        const start = sorted.findIndex((item) => item.path === selectionAnchor),
+          end = sorted.findIndex((item) => item.path === file.path)
+        if (start >= 0 && end >= 0) {
+          sorted
+            .slice(Math.min(start, end), Math.max(start, end) + 1)
+            .forEach((item) => next.add(item.path))
+          return next
+        }
+      }
+      next.has(file.path) ? next.delete(file.path) : next.add(file.path)
+      selectionAnchor = file.path
+      return next
+    })
+  }
+  function dropUpload(event) {
+    uploadDragging = false
+    if (event.defaultPrevented || !event.dataTransfer?.files.length) return
+    event.preventDefault()
+    uploader?.upload(event.dataTransfer.files)
+  }
+  async function loadStorage() {
+    try {
+      storage = await (
+        await requireOK(await apiFetch('/api/me/settings'))
+      ).json()
+    } catch {}
+  }
+  function startTransfer(mode, paths = [...get(selected)]) {
+    if (paths.length)
+      transfer = { mode, paths: [...paths], initialPath: get(currentPath) }
+  }
+  function copySelection(mode) {
+    const paths = [...get(selected)]
+    if (paths.length) {
+      clipboard = { mode, paths }
+      success(
+        mode === 'copy'
+          ? $i18n('Items copied to clipboard')
+          : $i18n('Items ready to move')
+      )
+    }
+  }
+  async function transferred(results) {
+    const done = results.filter((r) => r.ok).map((r) => r.path)
+    if (clipboard?.mode === 'move') {
+      clipboard.paths = clipboard.paths.filter((path) => !done.includes(path))
+      if (!clipboard.paths.length) clipboard = null
+    }
+    if (done.length) {
+      success($i18n('File operation completed'))
+      await loadFiles(get(currentPath))
+      await loadFavorites().catch(() => {})
+      loadStorage()
+    }
+  }
 
   let showMenu = false,
     mobileNav = false,
@@ -59,16 +137,19 @@
     indexing = false
   let dragOverPath = null,
     deletePaths = [],
-    deleting = false,
-    downloading = false
-  let viewMode =
-    localStorage.getItem('fileship_view') === 'grid' ? 'grid' : 'list'
+    deleting = false
+  let viewMode = ['grid', 'gallery'].includes(
+    localStorage.getItem('fileship_view')
+  )
+    ? localStorage.getItem('fileship_view')
+    : 'list'
   let viewportWidth = window.innerWidth
 
   onMount(() => {
     loadFiles('', { page: 1, sort_by: sortKey, sort_asc: sortAsc })
-    loadFavorites().catch(() => error('Could not load favorites'))
-    connectWS()
+    loadFavorites().catch(() => error($i18n('Could not load favorites')))
+    connectWS(loadStorage)
+    loadStorage()
     return () => {
       disconnectWS()
       clearTimeout(searchTimeout)
@@ -103,6 +184,11 @@
       showSettings ||
       showThemePicker ||
       showTrash ||
+      transfer ||
+      infoPath !== null ||
+      showShares ||
+      showHelp ||
+      archivePaths ||
       deletePaths.length
     )
       return
@@ -116,9 +202,41 @@
       showMenu = false
       mobileNav = false
     }
-    if (e.target.closest('input, textarea, select, [contenteditable="true"]'))
+    if (
+      e.target.closest(
+        'input:not([type="checkbox"]), textarea, select, [contenteditable="true"]'
+      )
+    )
       return
+    if (e.key === 'F1') {
+      e.preventDefault()
+      showHelp = true
+      return
+    }
+    if (e.key === 'F2' && get(selected).size === 1) {
+      e.preventDefault()
+      document
+        .querySelector(
+          '[data-file-path="' + CSS.escape([...get(selected)][0]) + '"]'
+        )
+        ?.dispatchEvent(new CustomEvent('rename-item'))
+      return
+    }
+    if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault()
+      navigateTo(get(currentPath).split('/').slice(0, -1).join('/'))
+      return
+    }
     if (e.ctrlKey || e.metaKey) {
+      if (
+        ['c', 'x', 'v'].includes(e.key.toLowerCase()) &&
+        !window.getSelection()?.toString()
+      ) {
+        e.preventDefault()
+        if (e.key.toLowerCase() === 'v') {
+          if (clipboard) startTransfer(clipboard.mode, clipboard.paths)
+        } else copySelection(e.key.toLowerCase() === 'c' ? 'copy' : 'move')
+      }
       if (e.key.toLowerCase() === 'n') {
         e.preventDefault()
         openCreate('folder')
@@ -127,7 +245,7 @@
         e.preventDefault()
         selected.set(new Set(sorted.map((f) => f.path)))
       }
-      if (e.key.toLowerCase() === 'k') {
+      if (['k', 'f'].includes(e.key.toLowerCase())) {
         e.preventDefault()
         searchInput?.focus()
       }
@@ -148,7 +266,7 @@
     if (creating) return
     const name = createName.trim()
     if (!validName(name)) {
-      error('Use a name without slashes or control characters')
+      error($i18n('Use a name without slashes or control characters'))
       return
     }
     creating = true
@@ -164,7 +282,7 @@
             body: JSON.stringify({ path })
           })
         )
-      success(`Created “${name}”`)
+      success($i18n('Created “{name}”', { name }))
       createKind = ''
       createName = ''
       await loadFiles(parent)
@@ -191,39 +309,23 @@
       count = deletePaths.length - failed.length
     deletePaths = []
     deleting = false
-    if (count) success(`Moved ${count} item${count === 1 ? '' : 's'} to trash`)
+    if (count) success($i18n('Moved {count} items to trash', { count }))
     if (failed.length)
       error(
-        `${failed.length} item(s) failed: ${results.find((r) => r.status === 'rejected').reason.message}`
+        $i18n('{count} actions failed', { count: failed.length }) +
+          ': ' +
+          results.find((r) => r.status === 'rejected').reason.message
       )
     await loadFiles(get(currentPath))
     selected.set(new Set(failed))
     await loadFavorites().catch(() => {})
-  }
-  async function downloadSelected() {
-    if (downloading) return
-    downloading = true
-    try {
-      await saveDownload(
-        await apiFetch('/api/files/zip-multi', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: [...get(selected)] })
-        }),
-        'fileship-download.zip'
-      )
-    } catch (err) {
-      error(err.message)
-    } finally {
-      downloading = false
-    }
   }
   async function triggerReindex() {
     indexing = true
     showMenu = false
     try {
       await requireOK(await apiFetch('/api/files/reindex', { method: 'POST' }))
-      success('Search indexing started')
+      success($i18n('Search indexing started'))
     } catch (err) {
       error(err.message)
     }
@@ -231,23 +333,26 @@
   }
   async function moveFile(e, targetPath) {
     e.preventDefault()
+    e.stopPropagation()
     dragOverPath = null
+    if (e.dataTransfer?.files.length) {
+      uploader?.upload(e.dataTransfer.files, targetPath)
+      uploadDragging = false
+      return
+    }
     const src = e.dataTransfer?.getData('fileship/path')
     if (!src || src === targetPath || targetPath.startsWith(src + '/')) return
-    const name = src.split('/').pop()
+    let paths = [src]
     try {
-      await requireOK(
-        await apiFetch('/api/files/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            src,
-            dst: targetPath ? `${targetPath}/${name}` : name
-          })
-        })
-      )
-      success(`Moved “${name}”`)
-      await loadFiles(get(currentPath))
+      paths =
+        JSON.parse(e.dataTransfer.getData('fileship/paths') || 'null') || paths
+    } catch {}
+    const mode = e.ctrlKey || e.metaKey ? 'copy' : 'move'
+    try {
+      const results = await transferFiles(paths, targetPath, mode)
+      await transferred(results)
+      const failed = results.filter((result) => !result.ok)
+      if (failed.length) error(failed.map((result) => result.error).join('\n'))
     } catch (err) {
       error(err.message)
     }
@@ -264,7 +369,7 @@
           })
         })
       )
-      success('Archive extracted')
+      success($i18n('Archive extracted'))
       await loadFiles(get(currentPath))
     } catch (err) {
       error(err.message)
@@ -301,7 +406,7 @@
           await apiFetch(`/api/files/search?q=${encodeURIComponent(query)}`, {
             signal: controller.signal
           }),
-          'Search failed'
+          $i18n('Search failed')
         )
         const results = await response.json()
         if (!controller.signal.aborted) searchResults = results || []
@@ -312,13 +417,13 @@
       }
     }, 280)
   }
-  const filters = [
-    { id: 'all', label: 'All files' },
-    { id: 'folder', label: 'Folders' },
-    { id: 'text', label: 'Documents' },
-    { id: 'image', label: 'Images' },
-    { id: 'video', label: 'Video' },
-    { id: 'audio', label: 'Audio' }
+  $: filters = [
+    { id: 'all', label: $i18n('All files') },
+    { id: 'folder', label: $i18n('Folders') },
+    { id: 'text', label: $i18n('Documents') },
+    { id: 'image', label: $i18n('Images') },
+    { id: 'video', label: $i18n('Video') },
+    { id: 'audio', label: $i18n('Audio') }
   ]
   $: favoritePaths = new Set($favorites.map((f) => f.path))
   $: isSearching = !!searchQuery.trim()
@@ -328,8 +433,9 @@
   }))
   $: filtered = displayFiles.filter(
     (file) =>
-      filter === 'all' ||
-      (filter === 'starred' ? file.starred : fileKind(file) === filter)
+      (!$preferences.hideDotfiles || !file.name.startsWith('.')) &&
+      (filter === 'all' ||
+        (filter === 'starred' ? file.starred : fileKind(file) === filter))
   )
   // Preserve server ordering across folder pages; sort recursive search locally.
   $: sorted = isSearching
@@ -351,60 +457,101 @@
   $: totalPages = Math.max(1, Math.ceil($files.total / $files.per_page))
   $: selCount = $selected.size
   $: title = isSearching
-    ? 'Search results'
+    ? $i18n('Search results')
     : $currentPath
       ? $currentPath.split('/').pop()
-      : 'Your files'
+      : $i18n('Your files')
   $: visibleError = searchError || $loadError
 </script>
 
-<svelte:window onkeydown={onKeydown} bind:innerWidth={viewportWidth} />
+<svelte:window
+  onkeydown={onKeydown}
+  bind:innerWidth={viewportWidth}
+  ondragover={(e) => {
+    if (Array.from(e.dataTransfer?.types || []).includes('Files')) {
+      e.preventDefault()
+      uploadDragging = true
+    }
+  }}
+  ondragleave={(e) => {
+    if (!e.relatedTarget) uploadDragging = false
+  }}
+  ondrop={dropUpload}
+/>
+<a class="skip-link" href="#main-content">{$i18n('Skip to files')}</a>
 <div class="layout">
   {#if mobileNav}<button
       class="nav-backdrop"
-      aria-label="Close navigation"
+      aria-label={$i18n('Close navigation')}
       onclick={() => (mobileNav = false)}
     ></button>{/if}
   <aside
     class="sidebar"
     class:mobile-open={mobileNav}
-    aria-label="Workspace navigation"
+    aria-label={$i18n('Workspace navigation')}
     inert={viewportWidth <= 800 && !mobileNav}
   >
     <button
       class="drawer-close"
-      aria-label="Close navigation"
+      aria-label={$i18n('Close navigation')}
       onclick={() => (mobileNav = false)}><Icon name="x" size={18} /></button
     >
-    <a class="brand" href="/" aria-label="Fileship home"
+    <a class="brand" href="/" aria-label={$i18n('Fileship home')}
       ><Icon name="ship" size={29} /><strong>fileship<span>.</span></strong></a
     >
     <div class="workspace-label">
-      <i></i>File manager
+      <i></i>{$i18n('File manager')}
     </div>
-    <nav class="sidebar-nav" aria-label="Main navigation">
-      <span class="nav-label">LIBRARY</span>
+    <nav class="sidebar-nav" aria-label={$i18n('Main navigation')}>
+      <span class="nav-label">{$i18n('Library')}</span>
       <button
         class="nav-item"
         class:active={filter !== 'starred'}
         onclick={() => navigateTo('')}
-        ><Icon name="folder" size={19} /><span>All files</span></button
+        ><Icon name="folder" size={19} /><span>{$i18n('All files')}</span
+        ></button
+      >
+      <button
+        class="nav-item"
+        onclick={() => {
+          openCreate('folder')
+          mobileNav = false
+        }}
+        ><Icon name="plus" size={19} /><span>{$i18n('New folder')}</span
+        ></button
+      >
+      <button
+        class="nav-item"
+        onclick={() => {
+          openCreate('file')
+          mobileNav = false
+        }}
+        ><Icon name="file" size={19} /><span>{$i18n('New file')}</span></button
+      >
+      <button
+        class="nav-item"
+        onclick={() => {
+          showShares = true
+          mobileNav = false
+        }}
+        ><Icon name="share" size={19} /><span>{$i18n('Shared links')}</span
+        ></button
       >
       <button
         class="nav-item"
         class:active={filter === 'starred'}
         onclick={() => setFilter('starred')}
-        ><Icon name="star" size={19} /><span>Favorites in this folder</span
-        ></button
+        title={$i18n('Favorites in this folder')}
+        ><Icon name="star" size={19} /><span>{$i18n('Favorites')}</span></button
       >
       <button
         class="nav-item"
         onclick={() => {
           showTrash = true
           mobileNav = false
-        }}><Icon name="trash" size={19} /><span>Trash</span></button
+        }}><Icon name="trash" size={19} /><span>{$i18n('Trash')}</span></button
       >
-      <span class="nav-label favorites-label">QUICK ACCESS</span>
+      <span class="nav-label favorites-label">{$i18n('Quick access')}</span>
       {#each $favorites.slice(0, 8) as fav (fav.id)}<button
           class="nav-item favorite-link"
           title={fav.path}
@@ -419,43 +566,80 @@
             >{fav.name}</span
           ></button
         >{:else}<p class="favorites-hint">
-          Star a file or folder to keep it close.
+          {$i18n('Star a file or folder to keep it close.')}
         </p>{/each}
     </nav>
     <div class="sidebar-bottom">
+      {#if storage}<div class="storage-summary">
+          <span>{$i18n('Storage used')}</span><strong
+            >{formatBytes(storage.disk_usage, $locale)}</strong
+          >{#if storage.quota_bytes > 0}<progress
+              value={storage.disk_usage}
+              max={storage.quota_bytes}
+              aria-label={$i18n('Storage used')}
+            ></progress><small
+              >{formatBytes(storage.quota_bytes, $locale)}
+              {$i18n('Quota')}</small
+            >{/if}
+        </div>{/if}
+      <button
+        class="nav-item"
+        onclick={() => {
+          showHelp = true
+          mobileNav = false
+        }}
+        ><Icon name="info" size={18} /><span>{$i18n('Keyboard shortcuts')}</span
+        ></button
+      >
       {#if $user?.is_admin}<a class="nav-item" href="/admin"
-          ><Icon name="users" size={18} /><span>Administration</span></a
+          ><Icon name="users" size={18} /><span>{$i18n('Administration')}</span
+          ></a
         >{/if}<button
         class="nav-item"
         onclick={() => {
           showSettings = true
           mobileNav = false
-        }}><Icon name="settings" size={18} /><span>Settings</span></button
+        }}
+        ><Icon name="settings" size={18} /><span>{$i18n('Settings')}</span
+        ></button
       ><button
         class="nav-item"
         onclick={() => {
           showThemePicker = true
           mobileNav = false
-        }}><Icon name="palette" size={18} /><span>Appearance</span></button
+        }}
+        ><Icon name="palette" size={18} /><span>{$i18n('Appearance')}</span
+        ></button
       >
     </div>
     <div class="sidebar-user">
       <span class="avatar">{($user?.username?.[0] ?? '?').toUpperCase()}</span>
       <div>
         <strong>{$user?.username}</strong><span
-          >{$user?.is_admin ? 'Administrator' : 'Member'}</span
+          >{$user?.is_admin ? $i18n('Administrator') : $i18n('Member')}</span
         >
       </div>
-      <button onclick={logout} aria-label="Sign out" title="Sign out"
-        ><Icon name="logout" size={17} /></button
+      <button
+        onclick={logout}
+        aria-label={$i18n('Sign out')}
+        title={$i18n('Sign out')}><Icon name="logout" size={17} /></button
       >
     </div>
   </aside>
-  <main class="main" inert={mobileNav && viewportWidth <= 800}>
+  <main
+    id="main-content"
+    class="main"
+    tabindex="-1"
+    class:upload-dragging={uploadDragging}
+    inert={mobileNav && viewportWidth <= 800}
+  >
+    {#if uploadDragging}<div class="upload-overlay">
+        <Icon name="upload" size={35} />{$i18n('Drop files to upload')}
+      </div>{/if}
     <header class="topbar">
       <button
         class="icon-btn mobile-menu"
-        aria-label="Open navigation"
+        aria-label={$i18n('Open navigation')}
         aria-expanded={mobileNav}
         onclick={() => (mobileNav = !mobileNav)}
         ><Icon name="menu" size={21} /></button
@@ -465,21 +649,24 @@
           bind:this={searchInput}
           bind:value={searchQuery}
           oninput={onSearch}
-          placeholder="Search your files…"
-          aria-label="Search files"
+          placeholder={$i18n('Search your files…')}
+          aria-label={$i18n('Search files')}
         />{#if isSearching}<button
             class="icon-btn"
             onclick={clearSearch}
-            aria-label="Clear search"><Icon name="x" size={15} /></button
+            aria-label={$i18n('Clear search')}
+            ><Icon name="x" size={15} /></button
           >{:else}<kbd>Ctrl K</kbd>{/if}
       </div>
       <span
         class="connection"
         class:offline={$connection !== 'connected'}
         title={$connection === 'connected'
-          ? 'Live updates connected'
-          : 'Live updates reconnecting'}
-        ><i></i>{$connection === 'connected' ? 'Live' : 'Connecting'}</span
+          ? $i18n('Live updates connected')
+          : $i18n('Live updates reconnecting')}
+        ><i></i>{$connection === 'connected'
+          ? $i18n('Live')
+          : $i18n('Connecting')}</span
       >
     </header>
     <div class="workspace">
@@ -488,17 +675,23 @@
           <h1>{title}</h1>
         </div>
         <div class="heading-actions">
-          <button class="btn" onclick={() => openCreate('folder')}
-            ><Icon name="plus" size={17} />New folder</button
-          ><button class="btn primary" onclick={() => uploader?.openPicker()}
-            ><Icon name="upload" size={17} />Upload files</button
+          <button class="btn" onclick={() => (infoPath = $currentPath)}
+            ><Icon name="info" size={17} />{$i18n('Folder information')}</button
+          >
+          {#if clipboard}<button
+              class="btn"
+              onclick={() => startTransfer(clipboard.mode, clipboard.paths)}
+              ><Icon name="clipboard" size={17} />{$i18n('Paste items')}</button
+            >{/if}
+          <button class="btn primary" onclick={() => uploader?.openPicker()}
+            ><Icon name="upload" size={17} />{$i18n('Upload files')}</button
           >
         </div>
       </section>
-      <Dropzone bind:this={uploader} />
-      <section class="file-section" aria-label="File browser">
+      <Dropzone bind:this={uploader} expanded={showUpload} />
+      <section class="file-section" aria-label={$i18n('File browser')}>
         <div class="file-toolbar">
-          <div class="filter-tabs" aria-label="Filter current page">
+          <div class="filter-tabs" aria-label={$i18n('Filter current page')}>
             {#each filters as item}<button
                 class:active={filter === item.id}
                 aria-pressed={filter === item.id}
@@ -506,14 +699,14 @@
               >{/each}{#if filter === 'starred'}<button
                 class="active"
                 onclick={() => setFilter('all')}
-                >Favorites <Icon name="x" size={12} /></button
+                >{$i18n('Favorites')} <Icon name="x" size={12} /></button
               >{/if}
           </div>
           <div class="toolbar-actions">
             <button
               class="icon-btn"
-              aria-label="Refresh folder"
-              title="Refresh folder"
+              aria-label={$i18n('Refresh folder')}
+              title={$i18n('Refresh folder')}
               disabled={$loading}
               onclick={() => loadFiles($currentPath)}
               ><Icon name="refresh" size={17} /></button
@@ -521,16 +714,23 @@
             <div class="view-toggle">
               <button
                 class:active={viewMode === 'list'}
-                aria-label="List view"
+                aria-label={$i18n('List view')}
                 aria-pressed={viewMode === 'list'}
                 onclick={() => setView('list')}
                 ><Icon name="list" size={17} /></button
               ><button
                 class:active={viewMode === 'grid'}
-                aria-label="Grid view"
+                aria-label={$i18n('Grid view')}
                 aria-pressed={viewMode === 'grid'}
                 onclick={() => setView('grid')}
                 ><Icon name="grid" size={17} /></button
+              >
+              <button
+                class:active={viewMode === 'gallery'}
+                aria-label={$i18n('Gallery view')}
+                aria-pressed={viewMode === 'gallery'}
+                onclick={() => setView('gallery')}
+                ><Icon name="image" size={17} /></button
               >
             </div>
           </div>
@@ -538,75 +738,105 @@
         <div class="list-meta">
           <span
             >{isSearching
-              ? `${searchResults?.length ?? 0} results${searchResults?.length >= 200 ? ' (first 200)' : ''}`
-              : `${$files.total} items`}<span class="meta-divider">/</span
-            >{filter === 'all'
-              ? 'All types'
+              ? $i18n(
+                  searchResults?.length === 1
+                    ? '{count} result'
+                    : '{count} results',
+                  {
+                    count: searchResults?.length ?? 0
+                  }
+                ) + (searchResults?.length >= 200 ? $i18n(' (first 200)') : '')
+              : $i18n($files.total === 1 ? '{count} item' : '{count} items', {
+                  count: $files.total
+                })}<span class="meta-divider">/</span>{filter === 'all'
+              ? $i18n('All types')
               : filter === 'starred'
-                ? 'Favorites on this page'
-                : `${filters.find((f) => f.id === filter)?.label} on this page`}</span
+                ? $i18n('Favorites on this page')
+                : $i18n('{type} on this page', {
+                    type: filters.find((f) => f.id === filter)?.label
+                  })}</span
           >
           <div class="list-controls">
             <label
-              >Sort by <select
-                aria-label="Sort files"
+              >{$i18n('Sort by')}
+              <select
+                aria-label={$i18n('Sort files')}
                 value={`${sortKey}:${sortAsc}`}
                 onchange={(e) => {
                   const [key, asc] = e.target.value.split(':')
                   setSort(key, asc === 'true')
                 }}
-                ><option value="name:true">Name A–Z</option><option
-                  value="name:false">Name Z–A</option
-                ><option value="mod_time:false">Newest first</option><option
-                  value="mod_time:true">Oldest first</option
-                ><option value="size:false">Largest first</option><option
-                  value="size:true">Smallest first</option
+                ><option value="name:true">{$i18n('Name A–Z')}</option><option
+                  value="name:false">{$i18n('Name Z–A')}</option
+                ><option value="mod_time:false">{$i18n('Newest first')}</option
+                ><option value="mod_time:true">{$i18n('Oldest first')}</option
+                ><option value="size:false">{$i18n('Largest first')}</option
+                ><option value="size:true">{$i18n('Smallest first')}</option
                 ></select
               ></label
             >
             <div class="menu-wrap">
               <button
                 class="icon-btn"
-                aria-label="More actions"
+                aria-label={$i18n('More actions')}
                 aria-expanded={showMenu}
                 onclick={() => (showMenu = !showMenu)}
                 ><Icon name="more" size={19} /></button
               >{#if showMenu}<button
                   class="menu-backdrop"
-                  aria-label="Close actions"
+                  aria-label={$i18n('Close actions')}
                   onclick={() => (showMenu = false)}
                 ></button>
                 <div class="action-menu">
+                  <button
+                    onclick={() => {
+                      showUpload = !showUpload
+                      showMenu = false
+                    }}
+                    ><Icon name="upload" size={16} />{showUpload
+                      ? $i18n('Hide upload area')
+                      : $i18n('Show upload area')}</button
+                  >
                   <button onclick={() => openCreate('file')}
-                    ><Icon name="file" size={16} />New file</button
+                    ><Icon name="file" size={16} />{$i18n('New file')}</button
                   ><button
                     onclick={() => {
                       uploader?.openFolderPicker()
                       showMenu = false
-                    }}><Icon name="folder" size={16} />Upload folder</button
+                    }}
+                    ><Icon name="folder" size={16} />{$i18n(
+                      'Upload folder'
+                    )}</button
                   ><button onclick={triggerReindex} disabled={indexing}
                     ><Icon name="refresh" size={16} />{indexing
-                      ? 'Indexing…'
-                      : 'Rebuild search index'}</button
+                      ? $i18n('Indexing…')
+                      : $i18n('Rebuild search index')}</button
                   >
                 </div>{/if}
             </div>
           </div>
         </div>
         {#if selCount}<div class="selection-bar" role="status">
-            <span><strong>{selCount}</strong> selected</span><button
-              onclick={downloadSelected}
-              disabled={downloading}
-              ><Icon name="download" size={16} />{downloading
-                ? 'Preparing…'
-                : 'Download ZIP'}</button
+            <span>{$i18n('{count} selected', { count: selCount })}</span>
+            <button onclick={() => startTransfer('copy')}
+              ><Icon name="copy" size={16} />{$i18n('Copy')}</button
+            >
+            <button onclick={() => startTransfer('move')}
+              ><Icon name="move" size={16} />{$i18n('Move')}</button
+            >
+            {#if selCount === 1}<button
+                onclick={() => (infoPath = [...$selected][0])}
+                ><Icon name="info" size={16} />{$i18n('Information')}</button
+              >{/if}
+            <button onclick={() => (archivePaths = [...$selected])}
+              ><Icon name="download" size={16} />{$i18n('Download')}</button
             ><button
               class="danger"
               onclick={() => requestDelete([...$selected])}
-              ><Icon name="trash" size={16} />Move to trash</button
+              ><Icon name="trash" size={16} />{$i18n('Move to trash')}</button
             ><button
               class="clear-selection"
-              aria-label="Clear selection"
+              aria-label={$i18n('Clear selection')}
               onclick={() => selected.set(new Set())}
               ><Icon name="x" size={16} /></button
             >
@@ -619,36 +849,38 @@
               id="create-name"
               bind:value={createName}
               placeholder={createKind === 'folder'
-                ? 'Name your folder'
-                : 'Name your file'}
-              aria-label={createKind === 'folder' ? 'Folder name' : 'File name'}
+                ? $i18n('Name your folder')
+                : $i18n('Name your file')}
+              aria-label={createKind === 'folder'
+                ? $i18n('Folder name')
+                : $i18n('File name')}
               required
             /><button class="btn primary" disabled={creating}
-              >{creating ? 'Creating…' : 'Create'}</button
+              >{creating ? $i18n('Creating…') : $i18n('Create')}</button
             ><button
               type="button"
               class="icon-btn"
-              aria-label="Cancel create"
+              aria-label={$i18n('Cancel create')}
               onclick={() => (createKind = '')}
               ><Icon name="x" size={18} /></button
             >
           </form>{/if}
         <div
           class="file-wrap"
-          class:grid-view={viewMode === 'grid'}
+          class:grid-view={viewMode !== 'list'}
           bind:this={tableWrap}
           aria-busy={$loading || searchLoading}
         >
           {#if $loading || searchLoading}<Skeleton rows={8} />
           {:else if visibleError}<div class="empty-state" role="alert">
               <span class="empty-icon"><Icon name="warning" size={30} /></span>
-              <h2>Something didn’t load</h2>
+              <h2>{$i18n('Something didn’t load')}</h2>
               <p>{visibleError}</p>
               <button
                 class="btn"
                 onclick={() =>
                   isSearching ? onSearch() : loadFiles($currentPath)}
-                >Try again</button
+                >{$i18n('Try again')}</button
               >
             </div>
           {:else if sorted.length === 0}<div class="empty-state">
@@ -664,27 +896,34 @@
               >
               <h2>
                 {isSearching
-                  ? 'No files found'
+                  ? $i18n('No files found')
                   : filter !== 'all'
-                    ? 'Nothing here yet'
-                    : 'Make room for your next idea'}
+                    ? $i18n('Nothing here yet')
+                    : $i18n('This folder is empty')}
               </h2>
               <p>
                 {isSearching
-                  ? `No matches for “${searchQuery}”. Try another name.`
+                  ? $i18n('No matches for “{query}”. Try another name.', {
+                      query: searchQuery
+                    })
                   : filter !== 'all'
-                    ? 'Try another filter or a different page.'
-                    : 'Upload your first file or create a folder to get started.'}
+                    ? $i18n('Try another filter or a different page.')
+                    : $i18n(
+                        'Upload your first file or create a folder to get started.'
+                      )}
               </p>
               {#if isSearching}<button class="btn" onclick={clearSearch}
-                  >Clear search</button
+                  >{$i18n('Clear search')}</button
                 >{:else if filter !== 'all'}<button
                   class="btn"
-                  onclick={() => setFilter('all')}>Show all files</button
+                  onclick={() => setFilter('all')}
+                  >{$i18n('Show all files')}</button
                 >{:else}<button
                   class="btn primary"
                   onclick={() => uploader?.openPicker()}
-                  ><Icon name="upload" size={17} />Upload files</button
+                  ><Icon name="upload" size={17} />{$i18n(
+                    'Upload files'
+                  )}</button
                 >{/if}
             </div>
           {:else}<table>
@@ -693,7 +932,7 @@
                   ><th class="col-check"
                     ><input
                       type="checkbox"
-                      aria-label="Select all visible files"
+                      aria-label={$i18n('Select all visible files')}
                       checked={selCount > 0 &&
                         sorted.every((f) => $selected.has(f.path))}
                       indeterminate={selCount > 0 &&
@@ -712,7 +951,8 @@
                         : 'descending'
                       : 'none'}
                     ><button onclick={() => setSort('name')}
-                      >Name {#if sortKey === 'name'}<Icon
+                      >{$i18n('Name')}
+                      {#if sortKey === 'name'}<Icon
                           name={sortAsc ? 'sort_up' : 'sort_dn'}
                           size={12}
                         />{/if}</button
@@ -724,7 +964,9 @@
                         ? 'ascending'
                         : 'descending'
                       : 'none'}
-                    ><button onclick={() => setSort('size')}>Size</button></th
+                    ><button onclick={() => setSort('size')}
+                      >{$i18n('Size')}</button
+                    ></th
                   ><th
                     class="col-date"
                     aria-sort={sortKey === 'mod_time'
@@ -733,16 +975,18 @@
                         : 'descending'
                       : 'none'}
                     ><button onclick={() => setSort('mod_time')}
-                      >Last modified</button
+                      >{$i18n('Last modified')}</button
                     ></th
                   ><th class="col-actions"
-                    ><span class="sr-only">Actions</span></th
+                    ><span class="sr-only">{$i18n('Actions')}</span></th
                   ></tr
                 ></thead
               ><tbody
                 >{#each sorted as file (file.path)}<FileRow
                     showPath={isSearching}
                     {file}
+                    gallery={viewMode === 'gallery'}
+                    onSelect={selectFile}
                     {dragOverPath}
                     onPreview={(f) => (previewFile = f)}
                     onShare={(f) => (shareFile = f)}
@@ -750,8 +994,18 @@
                     onNavigate={navigateTo}
                     onUnzip={unzip}
                     onDelete={(f) => requestDelete([f.path])}
+                    onCopy={(f) => startTransfer('copy', [f.path])}
+                    onMove={(f) => startTransfer('move', [f.path])}
+                    onInfo={(f) => (infoPath = f.path)}
+                    onArchive={(f) => (archivePaths = [f.path])}
                     onDragOver={(e, path) => {
                       e.preventDefault()
+                      e.dataTransfer.dropEffect =
+                        Array.from(e.dataTransfer.types).includes('Files') ||
+                        e.ctrlKey ||
+                        e.metaKey
+                          ? 'copy'
+                          : 'move'
                       dragOverPath = path
                     }}
                     onDrop={moveFile}
@@ -761,37 +1015,47 @@
         </div>
         <footer class="file-footer">
           <span
-            >{sorted.length} shown{!isSearching
-              ? ` of ${$files.total} items`
-              : ''}</span
+            >{isSearching
+              ? $i18n('{count} shown', { count: sorted.length })
+              : $i18n('{shown} of {total} items', {
+                  shown: sorted.length,
+                  total: $files.total
+                })}</span
           >{#if !isSearching && totalPages > 1}<div class="pagination">
               <button
                 class="icon-btn"
-                aria-label="Previous page"
+                aria-label={$i18n('Previous page')}
                 disabled={$files.page <= 1 || $loading}
                 onclick={() =>
                   loadFiles($currentPath, { page: $files.page - 1 })}
                 ><Icon name="chevron_l" size={16} /></button
-              ><span>Page {$files.page} of {totalPages}</span><button
+              ><span>{$i18n('Page')} {$files.page} / {totalPages}</span><button
                 class="icon-btn"
-                aria-label="Next page"
+                aria-label={$i18n('Next page')}
                 disabled={$files.page >= totalPages || $loading}
                 onclick={() =>
                   loadFiles($currentPath, { page: $files.page + 1 })}
                 ><Icon name="chevron_r" size={16} /></button
               >
             </div>{:else}<span class="keyboard-hint"
-              ><kbd>Ctrl K</kbd> to search <span>·</span> Drag files to a folder</span
+              ><kbd>Ctrl K</kbd>
+              {$i18n('to search')} <span>·</span>
+              {$i18n('Drag files to a folder')}</span
             >{/if}
         </footer>
       </section>
     </div>
   </main>
 </div>
-<Preview file={previewFile} onClose={() => (previewFile = null)} /><ShareDialog
-  file={shareFile}
-  onClose={() => (shareFile = null)}
-/><Editor file={editorFile} onClose={() => (editorFile = null)} />
+<Preview
+  file={previewFile}
+  siblings={sorted.filter((f) => !f.is_dir)}
+  onNavigate={(f) => (previewFile = f)}
+  onClose={() => (previewFile = null)}
+/><ShareDialog file={shareFile} onClose={() => (shareFile = null)} /><Editor
+  file={editorFile}
+  onClose={() => (editorFile = null)}
+/>
 {#if showSettings}<Settings
     onClose={() => (showSettings = false)}
   />{/if}{#if showThemePicker}<ThemePicker
@@ -802,10 +1066,25 @@
       loadFiles($currentPath)
     }}
   />{/if}
+{#if transfer}<TransferDialog
+    {...transfer}
+    onComplete={transferred}
+    onClose={() => (transfer = null)}
+  />{/if}
+{#if infoPath !== null}<Properties
+    path={infoPath}
+    onClose={() => (infoPath = null)}
+  />{/if}
+{#if showShares}<Shares onClose={() => (showShares = false)} />{/if}
+{#if showHelp}<Help onClose={() => (showHelp = false)} />{/if}
+{#if archivePaths}<DownloadDialog
+    paths={archivePaths}
+    onClose={() => (archivePaths = null)}
+  />{/if}
 {#if deletePaths.length}<ConfirmDialog
-    title={`Move ${deletePaths.length === 1 ? 'this item' : `${deletePaths.length} items`} to trash?`}
-    description="You can restore these items from Trash for 30 days."
-    confirmLabel="Move to trash"
+    title={$i18n('Move {count} items to trash?', { count: deletePaths.length })}
+    description={$i18n('You can restore these items from Trash for 30 days.')}
+    confirmLabel={$i18n('Move to trash')}
     busy={deleting}
     onConfirm={confirmDelete}
     onClose={() => {
@@ -814,6 +1093,67 @@
   />{/if}<Toast />
 
 <style>
+  .skip-link {
+    position: fixed;
+    left: 16px;
+    top: -80px;
+    z-index: 100;
+    padding: 12px 18px;
+    background: var(--surface);
+    color: var(--accent);
+    border-radius: 8px;
+  }
+  .skip-link:focus {
+    top: 12px;
+  }
+  .upload-overlay {
+    position: fixed;
+    inset: 12px 12px 12px 264px;
+    z-index: 30;
+    background: var(--surface);
+    opacity: 0.95;
+    border: 2px dashed var(--accent);
+    border-radius: 12px;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--accent);
+  }
+  @media (max-width: 800px) {
+    .upload-overlay {
+      left: 12px;
+    }
+  }
+  .heading-actions {
+    flex-wrap: wrap;
+  }
+  .selection-bar {
+    flex-wrap: wrap;
+  }
+  .storage-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 15px 14px;
+    color: var(--sidebar-text);
+    font-size: 12px;
+  }
+  .storage-summary strong {
+    margin-left: auto;
+    font-weight: 500;
+  }
+  .storage-summary progress {
+    width: 100%;
+    height: 5px;
+    accent-color: var(--sidebar-active);
+  }
+  .storage-summary small {
+    color: var(--sidebar-muted);
+  }
   .drawer-close {
     display: none;
     position: absolute;
@@ -821,7 +1161,7 @@
     top: 16px;
     background: none;
     border: 0;
-    color: #c5d1c8;
+    color: var(--sidebar-text);
     padding: 8px;
     cursor: pointer;
   }
@@ -832,40 +1172,41 @@
   }
   .layout {
     display: flex;
-    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
   }
   .sidebar {
-    width: 252px;
+    width: 240px;
     flex-shrink: 0;
     height: 100dvh;
     position: sticky;
     top: 0;
     display: flex;
     flex-direction: column;
-    padding: 30px 18px 0;
+    padding: 22px 18px 0;
     background: var(--sidebar-bg);
-    color: #eef3ef;
+    color: var(--sidebar-text);
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 11px;
-    color: #b9d99e;
+    color: var(--sidebar-active);
     padding: 0 12px;
     text-decoration: none;
   }
   .brand strong {
     font-size: 29px;
     letter-spacing: -1.4px;
-    color: #f6faf7;
+    color: var(--sidebar-text);
   }
   .brand strong span {
-    color: #b9d99e;
+    color: var(--sidebar-active);
   }
   .workspace-label {
-    margin: 27px 12px 30px;
-    color: #c0cec4;
-    font-size: 11px;
+    margin: 16px 12px 22px;
+    color: var(--sidebar-text);
+    font-size: 12px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -874,7 +1215,7 @@
   .workspace-label i {
     width: 5px;
     height: 5px;
-    background: #b9d99e;
+    background: var(--sidebar-active);
     border-radius: 50%;
   }
   .sidebar-nav {
@@ -884,26 +1225,26 @@
   }
   .nav-label {
     display: block;
-    color: #94a79b;
-    font-size: 9px;
-    letter-spacing: 1.5px;
+    color: var(--sidebar-muted);
+    font-size: 12px;
+    letter-spacing: 0;
     padding: 0 14px 12px;
     font-weight: 600;
   }
   .favorites-label {
-    padding-top: 35px;
+    padding-top: 20px;
   }
   .nav-item {
     width: 100%;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
-    margin: 3px 0;
+    padding: 9px 14px;
+    margin: 2px 0;
     border: 0;
     background: transparent;
     border-radius: 8px;
-    color: #c5d1c8;
+    color: var(--sidebar-text);
     text-align: left;
     cursor: pointer;
     font-size: 13px;
@@ -915,12 +1256,12 @@
     white-space: nowrap;
   }
   .nav-item:hover {
-    background: #2e4435;
+    background: var(--sidebar-hover);
     color: white;
   }
   .nav-item.active {
-    background: #b9d99e;
-    color: #22382b;
+    background: var(--sidebar-active);
+    color: var(--sidebar-on-active);
     font-weight: 600;
   }
   .favorite-link {
@@ -929,7 +1270,7 @@
     padding-bottom: 10px;
   }
   .favorites-hint {
-    color: #9aac9f;
+    color: var(--sidebar-muted);
     font-size: 12px;
     line-height: 1.8;
     margin: 0 14px;
@@ -946,7 +1287,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border-top: 1px solid #3b5143;
+    border-top: 1px solid var(--sidebar-border);
     margin: 0 -18px;
     padding: 18px 24px;
   }
@@ -955,8 +1296,8 @@
     place-items: center;
     width: 34px;
     height: 34px;
-    background: #d6dec7;
-    color: #304133;
+    background: var(--sidebar-active);
+    color: var(--sidebar-on-active);
     border-radius: 50%;
     font-size: 13px;
     font-weight: 600;
@@ -975,26 +1316,30 @@
     text-overflow: ellipsis;
   }
   .sidebar-user div span {
-    font-size: 10px;
-    color: #a5b8a9;
+    font-size: 12px;
+    color: var(--sidebar-muted);
   }
   .sidebar-user button {
     margin-left: auto;
     background: none;
     border: 0;
-    color: #b5c7b9;
+    color: var(--sidebar-text);
     cursor: pointer;
     padding: 8px;
     border-radius: 5px;
   }
   .sidebar-user button:hover {
-    background: #3a5141;
+    background: var(--sidebar-hover);
   }
   .main {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
   .topbar {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 22px;
@@ -1040,7 +1385,7 @@
     align-items: center;
     gap: 7px;
     color: var(--text2);
-    font-size: 11px;
+    font-size: 12px;
   }
   .connection i {
     background: var(--success);
@@ -1052,6 +1397,12 @@
     background: var(--warning);
   }
   .workspace {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
     max-width: 1600px;
     margin: 0 auto;
     padding: 22px 28px 20px;
@@ -1122,9 +1473,14 @@
     cursor: default;
   }
   .file-section {
-    margin-top: 20px;
+    flex: 1;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
   }
   .file-toolbar {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1132,6 +1488,7 @@
     border-bottom: 1px solid var(--border);
   }
   .filter-tabs {
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 24px;
@@ -1191,7 +1548,7 @@
     justify-content: space-between;
     padding: 12px 0;
     gap: 10px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text3);
   }
   .meta-divider {
@@ -1213,7 +1570,7 @@
     color: var(--text2);
     background: var(--bg);
     padding: 4px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
   .menu-wrap {
@@ -1256,6 +1613,7 @@
     background: var(--row-hover);
   }
   .selection-bar {
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     gap: 19px;
@@ -1275,7 +1633,7 @@
     border: 0;
     color: var(--accent);
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
   }
   .selection-bar .danger {
     color: var(--danger);
@@ -1303,13 +1661,16 @@
     background: var(--input-bg);
   }
   .file-wrap {
+    flex: 1;
+    min-height: 150px;
+    overscroll-behavior: contain;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
     overflow: auto;
-    max-height: max(240px, calc(100dvh - 330px));
   }
   table {
+    table-layout: fixed;
     width: 100%;
     border-collapse: collapse;
   }
@@ -1324,7 +1685,7 @@
     padding: 13px 17px;
     border-bottom: 1px solid var(--border);
     font-weight: 500;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text3);
     white-space: nowrap;
   }
@@ -1387,7 +1748,7 @@
     justify-content: space-between;
     gap: 15px;
     padding: 14px 0;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text3);
   }
   .pagination {
@@ -1502,7 +1863,7 @@
       left: 0;
       top: 0;
       z-index: 50;
-      width: 252px;
+      width: 240px;
       transform: translateX(-100%);
       transition: transform 0.2s;
     }
@@ -1549,7 +1910,7 @@
       gap: 6px;
     }
     .list-meta {
-      font-size: 10px;
+      font-size: 12px;
     }
     .list-controls {
       gap: 5px;
@@ -1558,7 +1919,7 @@
       display: none;
     }
     .file-wrap {
-      max-height: 65vh;
+      min-height: 180px;
     }
     .col-date {
       display: none;
@@ -1567,7 +1928,47 @@
       display: none;
     }
   }
+  @media (max-width: 600px) {
+    .file-toolbar {
+      flex-wrap: wrap;
+    }
+    .filter-tabs {
+      width: 100%;
+      gap: 20px;
+    }
+    .filter-tabs button {
+      min-height: 44px;
+      padding-bottom: 8px;
+    }
+    .toolbar-actions {
+      margin-left: auto;
+      padding-bottom: 8px;
+    }
+    .heading-actions {
+      flex-wrap: wrap;
+    }
+    .icon-btn {
+      min-height: 40px;
+      min-width: 40px;
+    }
+    .view-toggle button {
+      min-height: 36px;
+      min-width: 36px;
+    }
+    .workspace {
+      padding-top: 18px;
+    }
+    .list-meta {
+      flex-wrap: wrap;
+    }
+  }
   @media (max-width: 480px) {
+    th.col-actions {
+      width: 84px;
+    }
+    th.col-check {
+      width: 34px;
+    }
     .selection-bar {
       gap: 12px;
       padding: 10px;
@@ -1577,7 +1978,7 @@
       gap: 16px;
     }
     .filter-tabs button {
-      font-size: 11px;
+      font-size: 12px;
     }
     .list-controls label {
       font-size: 0;

@@ -28,7 +28,7 @@ func FileServer() http.Handler {
 			return
 		}
 		if _, err := fs.Stat(dist, path); err != nil {
-			if strings.HasPrefix(path, "assets/") || strings.HasPrefix(path, "locales/") || path == "favicon.svg" {
+			if strings.HasPrefix(path, "assets/") || strings.HasPrefix(path, "locales/") || strings.HasPrefix(path, "fonts/") || path == "favicon.svg" {
 				http.NotFound(w, r)
 				return
 			}

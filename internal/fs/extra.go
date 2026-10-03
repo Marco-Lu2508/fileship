@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -160,12 +161,39 @@ func DirSize(path string) (int64, error) {
 }
 
 func Copy(root, srcRel, dstRel string) error {
+	if _, err := CleanRelativePath(srcRel); err != nil {
+		return err
+	}
+	if _, err := CleanRelativePath(dstRel); err != nil {
+		return err
+	}
 	srcAbs, err := Resolve(root, srcRel)
 	if err != nil {
 		return err
 	}
 	dstAbs, err := Resolve(root, dstRel)
 	if err != nil {
+		return err
+	}
+	if srcAbs == dstAbs || strings.HasPrefix(dstAbs, srcAbs+string(os.PathSeparator)) {
+		return fmt.Errorf("destination is inside source")
+	}
+	if _, err := os.Lstat(dstAbs); err == nil {
+		return os.ErrExist
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	// Preflight the entire tree before creating a destination. Never follow a
+	// symlink or a special file when copying a selected folder.
+	if err := filepath.Walk(srcAbs, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("cannot copy non-regular file: %s", path)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -175,9 +203,65 @@ func Copy(root, srcRel, dstRel string) error {
 	}
 
 	if info.IsDir() {
-		return copyDir(srcAbs, dstAbs)
+		if err := os.Mkdir(dstAbs, info.Mode().Perm()); err != nil {
+			return err
+		}
+		err = filepath.Walk(srcAbs, func(path string, entry os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if path == srcAbs {
+				return nil
+			}
+			rel, err := filepath.Rel(srcAbs, path)
+			if err != nil {
+				return err
+			}
+			target := filepath.Join(dstAbs, rel)
+			if entry.IsDir() {
+				return os.Mkdir(target, entry.Mode().Perm())
+			}
+			return copyExclusive(path, target)
+		})
+		if err != nil {
+			os.RemoveAll(dstAbs)
+		}
+		return err
 	}
-	return copyFile(srcAbs, dstAbs)
+	return copyExclusive(srcAbs, dstAbs)
+}
+
+func copyExclusive(src, dst string) (err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("cannot copy non-regular file")
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			os.Remove(dst)
+		}
+	}()
+	_, err = io.Copy(out, in)
+	closeErr := out.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chtimes(dst, info.ModTime(), info.ModTime())
+	}
+	return err
 }
 
 func copyFile(src, dst string) error {

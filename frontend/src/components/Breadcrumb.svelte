@@ -1,4 +1,5 @@
 <script>
+  import { translator as i18n } from '../stores/i18n.js'
   import { loadFiles } from '../stores/files.js'
   import Icon from './Icon.svelte'
 
@@ -12,14 +13,20 @@
   }
 </script>
 
-<nav class="breadcrumb" aria-label="Path">
-  <button onclick={() => onNavigate('')} class="crumb home" title="Home">
+<nav class="breadcrumb" aria-label={$i18n('Path')}>
+  <button
+    onclick={() => onNavigate('')}
+    class="crumb home"
+    title={$i18n('Home')}
+  >
     <Icon name="home" size={14} />
-    <span>Home</span>
+    <span>{$i18n('Home')}</span>
   </button>
   {#each parts as part, i}
     <span class="sep"><Icon name="chevron_r" size={12} /></span>
-    <button class="crumb" onclick={() => go(i)}>{part}</button>
+    <button class="crumb" title={part} onclick={() => go(i)}
+      ><span>{part}</span></button
+    >
   {/each}
 </nav>
 
@@ -32,6 +39,8 @@
     min-width: 0;
   }
   .crumb {
+    min-width: 0;
+    max-width: min(220px, 55vw);
     background: none;
     border: none;
     color: var(--text2);
@@ -44,6 +53,17 @@
     gap: 0.3rem;
     white-space: nowrap;
   }
-  .crumb:hover { background: var(--border); color: var(--text); }
-  .sep { color: var(--border); display: flex; align-items: center; }
+  .crumb:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+  .crumb span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sep {
+    color: var(--border);
+    display: flex;
+    align-items: center;
+  }
 </style>

@@ -1,4 +1,5 @@
 <script>
+  import { locale, translator as i18n } from '../stores/i18n.js'
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { loadFiles, currentPath } from '../stores/files.js'
@@ -14,6 +15,7 @@
     fileInput,
     active = true
   const requests = new Set()
+  export let expanded = true
   export function openPicker() {
     fileInput?.click()
   }
@@ -54,15 +56,15 @@
       }
       xhr.onerror = () => {
         requests.delete(xhr)
-        resolve({ status: 0, message: 'Connection interrupted' })
+        resolve({ status: 0, message: $i18n('Connection interrupted') })
       }
       xhr.onabort = () => {
         requests.delete(xhr)
-        resolve({ status: 0, message: 'Upload cancelled' })
+        resolve({ status: 0, message: $i18n('Upload cancelled') })
       }
       xhr.ontimeout = () => {
         requests.delete(xhr)
-        resolve({ status: 0, message: 'Upload timed out' })
+        resolve({ status: 0, message: $i18n('Upload timed out') })
       }
       xhr.open('POST', '/api/files/upload')
       xhr.timeout = 30 * 60 * 1000
@@ -71,7 +73,7 @@
       xhr.send(form)
     })
   }
-  async function upload(fileList, destination = get(currentPath)) {
+  export async function upload(fileList, destination = get(currentPath)) {
     const batch = Array.from(fileList || []).map((file) => ({
       file,
       name: file.name,
@@ -95,7 +97,7 @@
           if (active) result = await send(entry, entry.path)
         }
         if (result.status < 200 || result.status >= 300)
-          throw new Error(result.message || 'Upload failed')
+          throw new Error(result.message || $i18n('Upload failed'))
         entry.state = 'done'
         entry.progress = 100
         completed++
@@ -107,9 +109,9 @@
     }
     if (!active) return
     if (completed)
-      success(`Uploaded ${completed} file${completed === 1 ? '' : 's'}`)
+      success($i18n('{count} files uploaded', { count: completed }))
     if (batch.some((entry) => entry.state === 'failed'))
-      error('Some uploads failed. See details below.')
+      error($i18n('Some uploads failed. See details below.'))
     // A finished upload must never navigate the user back to its destination.
     await loadFiles(get(currentPath))
   }
@@ -119,7 +121,8 @@
     await upload(list)
   }
   function handleDrop(event) {
-    if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return
+    if (!Array.from(event.dataTransfer?.types || []).includes($i18n('Files')))
+      return
     event.preventDefault()
     dragging = false
     upload(event.dataTransfer.files)
@@ -131,11 +134,12 @@
 
 <div
   class="dropzone"
+  class:hidden={!expanded}
   class:active={dragging}
   role="region"
-  aria-label="Upload area"
+  aria-label={$i18n('Upload area')}
   ondragover={(e) => {
-    if (Array.from(e.dataTransfer?.types || []).includes('Files')) {
+    if (Array.from(e.dataTransfer?.types || []).includes($i18n('Files'))) {
       e.preventDefault()
       dragging = true
     }
@@ -146,16 +150,18 @@
   <span class="upload-icon"><Icon name="upload" size={20} /></span>
   <div class="drop-copy">
     <strong
-      >{dragging ? 'Drop files to upload' : 'Upload to this folder'}</strong
+      >{dragging
+        ? $i18n('Drop files to upload')
+        : $i18n('Upload to this folder')}</strong
     >
     <p>
-      Drag & drop your files here, or <button onclick={openPicker}
-        >browse files</button
-      >
+      {$i18n('Drag & drop your files here, or')}
+      <button onclick={openPicker}>{$i18n('browse files')}</button>
     </p>
   </div>
   <button class="folder-button" onclick={openFolderPicker}
-    ><Icon name="folder" size={16} /><span>Upload folder</span></button
+    ><Icon name="folder" size={16} /><span>{$i18n('Upload folder')}</span
+    ></button
   >
   <input
     bind:this={fileInput}
@@ -163,7 +169,7 @@
     multiple
     onchange={handleInput}
     hidden
-    aria-label="Upload files"
+    aria-label={$i18n('Upload files')}
   /><input
     bind:this={folderInput}
     type="file"
@@ -172,17 +178,23 @@
     multiple
     onchange={handleInput}
     hidden
-    aria-label="Upload folder"
+    aria-label={$i18n('Upload folder')}
   />
 </div>
-{#if uploads.length}<section class="upload-list" aria-label="Upload progress">
+{#if uploads.length}<section
+    class="upload-list"
+    aria-label={$i18n('Upload progress')}
+  >
     <div class="upload-heading">
-      <strong>{busy ? 'Uploading to your workspace' : 'Upload summary'}</strong
+      <strong
+        >{busy
+          ? $i18n('Uploading to your workspace')
+          : $i18n('Upload summary')}</strong
       ><button
         onclick={() =>
           (uploads = uploads.filter(
             (entry) => entry.state === 'uploading' || entry.state === 'queued'
-          ))}>Clear completed</button
+          ))}>{$i18n('Clear completed')}</button
       >
     </div>
     {#each uploads as entry}<div class="upload-item">
@@ -198,23 +210,26 @@
           <strong title={entry.name}>{entry.name}</strong><span
             >{entry.state === 'failed'
               ? entry.message
-              : `${formatBytes(entry.file.size)} · ${entry.state === 'queued' ? 'Queued' : entry.state === 'done' ? 'Complete' : `${entry.progress}%`}`}</span
+              : `${formatBytes(entry.file.size, $locale)} · ${entry.state === 'queued' ? $i18n('Queued') : entry.state === 'done' ? $i18n('Complete') : `${entry.progress}%`}`}</span
           >
         </div>
         {#if entry.state === 'uploading'}<progress
             value={entry.progress}
             max="100"
-            aria-label={`Uploading ${entry.name}`}
+            aria-label={$i18n('Uploading {name}', { name: entry.name })}
           ></progress>{/if}{#if entry.state === 'failed'}<button
             onclick={() => {
               uploads = uploads.filter((item) => item !== entry)
               upload([entry.file], entry.path)
-            }}>Retry</button
+            }}>{$i18n('Retry')}</button
           >{/if}
       </div>{/each}
   </section>{/if}
 
 <style>
+  .dropzone.hidden {
+    display: none;
+  }
   .dropzone {
     display: flex;
     align-items: center;

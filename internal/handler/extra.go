@@ -34,9 +34,18 @@ func (h *Handler) searchFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
+	visible := make([]model.FileInfo, 0, len(results))
+	for _, file := range results {
+		if !claims.IsAdmin {
+			allowed, permErr := h.db.CheckPermission(claims.UserID, file.Path, "read")
+			if permErr != nil || !allowed {
+				continue
+			}
+		}
+		visible = append(visible, file)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	json.NewEncoder(w).Encode(visible)
 }
 
 // reindex startet einen manuellen Neu-Index
@@ -51,22 +60,7 @@ func (h *Handler) reindex(w http.ResponseWriter, r *http.Request) {
 // --- ZIP Multi-Download ---
 
 func (h *Handler) zipMulti(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Paths []string `json:"paths"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Paths) == 0 {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	if len(body.Paths) > 500 {
-		http.Error(w, "too many paths (max 500)", http.StatusBadRequest)
-		return
-	}
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="fileship-download.zip"`)
-	if err := fsvc.ZipMulti(h.userRoot(r), body.Paths, w); err != nil {
-		return
-	}
+	h.downloadArchive(w, r)
 }
 
 // --- Move ---
@@ -83,12 +77,19 @@ func (h *Handler) moveFile(w http.ResponseWriter, r *http.Request) {
 	if !h.checkPerm(w, r, body.Src, "write") {
 		return
 	}
+	if !h.checkPerm(w, r, body.Dst, "write") {
+		return
+	}
 	root := h.userRoot(r)
+	if !h.checkTransfer(w, r, body.Src, body.Dst, true) {
+		return
+	}
 	if err := fsvc.Move(root, body.Src, body.Dst); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	claims, username := h.claimsUser(r)
+	h.db.IndexRename(claims.UserID, body.Src, body.Dst)
 	h.db.LogAction(claims.UserID, username, "move", body.Src+"->"+body.Dst, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "move", Path: body.Dst})
 	w.WriteHeader(http.StatusNoContent)
@@ -108,12 +109,19 @@ func (h *Handler) copyFile(w http.ResponseWriter, r *http.Request) {
 	if !h.checkPerm(w, r, body.Src, "read") {
 		return
 	}
+	if !h.checkPerm(w, r, body.Dst, "write") {
+		return
+	}
 	root := h.userRoot(r)
+	if !h.checkTransfer(w, r, body.Src, body.Dst, false) {
+		return
+	}
 	if err := fsvc.Copy(root, body.Src, body.Dst); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	claims, username := h.claimsUser(r)
+	h.indexer.TriggerReindex(claims.UserID, root)
 	h.db.LogAction(claims.UserID, username, "copy", body.Src+"->"+body.Dst, r.RemoteAddr)
 	h.hub.Broadcast(model.WSEvent{Type: "copy", Path: body.Dst})
 	w.WriteHeader(http.StatusCreated)
@@ -191,7 +199,10 @@ func (h *Handler) listShares(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteShare(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
-	h.db.DeleteShareLink(token, claims.UserID)
+	if err := h.db.DeleteShareLink(token, claims.UserID); err != nil {
+		http.Error(w, "could not revoke share", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

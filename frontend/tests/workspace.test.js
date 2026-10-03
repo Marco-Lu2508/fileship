@@ -1,6 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { get } from 'svelte/store'
+import { locale } from '../src/stores/i18n.js'
 import { formatBytes, fileKind, validName } from '../src/lib/files.js'
 
 const storage = new Map()
@@ -18,6 +19,7 @@ const json = (value) =>
   })
 
 beforeEach(() => {
+  locale.set('en')
   storage.clear()
   localStorage.setItem('access_token', 'old-access')
   localStorage.setItem('refresh_token', 'old-refresh')
@@ -34,6 +36,8 @@ test('formatting handles zero, gigabytes, terabytes and invalid values', () => {
   assert.equal(formatBytes(1024 ** 3), '1 GB')
   assert.equal(formatBytes(1024 ** 4), '1 TB')
   assert.equal(formatBytes(NaN), '0 B')
+  assert.equal(formatBytes(1536, 'de'), '1,5 KB')
+  assert.equal(formatBytes(1536, 'en'), '1.5 KB')
   assert.equal(
     fileKind({ name: 'report.PDF', mime_type: 'application/pdf' }),
     'text'
@@ -44,9 +48,9 @@ test('formatting handles zero, gigabytes, terabytes and invalid values', () => {
 test('failed mutations propagate server errors instead of reporting success', async () => {
   globalThis.fetch = async () =>
     new Response('permission denied', { status: 403 })
-  await assert.rejects(workspace.mkdir('restricted'), /permission denied/)
-  await assert.rejects(workspace.deleteFile('restricted'), /permission denied/)
-  await assert.rejects(workspace.renameFile('a', 'b'), /permission denied/)
+  await assert.rejects(workspace.mkdir('restricted'), /permission denied/i)
+  await assert.rejects(workspace.deleteFile('restricted'), /permission denied/i)
+  await assert.rejects(workspace.renameFile('a', 'b'), /permission denied/i)
 })
 test('folder loading discards a late response after navigation', async () => {
   let release

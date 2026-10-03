@@ -12,6 +12,7 @@ import (
 	fsvc "github.com/yourname/fileship/internal/fs"
 	"github.com/yourname/fileship/internal/model"
 )
+
 // --- Unzip ---
 
 func (h *Handler) unzipFile(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +25,9 @@ func (h *Handler) unzipFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := h.userRoot(r)
+	if !h.checkPerm(w, r, body.ZipPath, "read") || !h.checkPerm(w, r, body.DestDir, "write") {
+		return
+	}
 	if err := fsvc.Unzip(root, body.ZipPath, body.DestDir); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -38,6 +42,9 @@ func (h *Handler) unzipFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) readText(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
+	if !h.checkPerm(w, r, path, "read") {
+		return
+	}
 	content, err := fsvc.ReadTextFile(h.userRoot(r), path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -56,6 +63,9 @@ func (h *Handler) writeText(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !h.checkPerm(w, r, body.Path, "write") {
+		return
+	}
 	if err := fsvc.WriteTextFile(h.userRoot(r), body.Path, body.Content); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -70,6 +80,9 @@ func (h *Handler) writeText(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) thumbnail(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
+	if !h.checkPerm(w, r, rel, "read") {
+		return
+	}
 	root := h.userRoot(r)
 	thumbDir := thumbDirFromDB(h.cfg.DBPath)
 

@@ -67,18 +67,27 @@ func (d *DB) ListPathPermissions(userID int64) ([]model.PathPermission, error) {
 // Längste Präfix-Übereinstimmung gewinnt.
 func (d *DB) CheckPermission(userID int64, relPath string, action string) (bool, error) {
 	perms, err := d.ListPathPermissions(userID)
-	if err != nil || len(perms) == 0 {
+	if err != nil {
+		return false, err
+	}
+	if len(perms) == 0 {
 		return true, nil // keine Regeln = alles erlaubt
 	}
 
-	relPath = filepath.ToSlash(relPath)
+	relPath = strings.Trim(filepath.ToSlash(filepath.Clean(relPath)), "/")
+	if relPath == "." {
+		relPath = ""
+	}
 	var best *model.PathPermission
 	bestLen := -1
 
 	for i := range perms {
-		rule := filepath.ToSlash(perms[i].Path)
+		rule := strings.Trim(filepath.ToSlash(filepath.Clean(perms[i].Path)), "/")
+		if rule == "." {
+			rule = ""
+		}
 		// Exakter Match oder Präfix-Match
-		if relPath == rule || strings.HasPrefix(relPath, rule+"/") || strings.HasPrefix(relPath, rule) {
+		if rule == "" || relPath == rule || strings.HasPrefix(relPath, rule+"/") {
 			if len(rule) > bestLen {
 				bestLen = len(rule)
 				best = &perms[i]

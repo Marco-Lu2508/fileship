@@ -1,11 +1,14 @@
-export function formatBytes(bytes = 0) {
+import { locale, translateError } from '../stores/i18n.js'
+import { get } from 'svelte/store'
+
+export function formatBytes(bytes = 0, language = get(locale)) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const index = Math.min(
     Math.floor(Math.log(bytes) / Math.log(1024)),
     units.length - 1
   )
-  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: index > 0 ? 1 : 0 }).format(bytes / 1024 ** index)} ${units[index]}`
+  return `${new Intl.NumberFormat(language, { maximumFractionDigits: index > 0 ? 1 : 0 }).format(bytes / 1024 ** index)} ${units[index]}`
 }
 
 export function fileKind(file) {
@@ -39,9 +42,11 @@ export async function requireOK(
   if (response.ok) return response
   const message = (await response.text()).trim()
   throw new Error(
-    message && message.length < 240 && !message.startsWith('<')
-      ? message
-      : fallback
+    translateError(
+      message && message.length < 240 && !message.startsWith('<')
+        ? message
+        : fallback
+    )
   )
 }
 

@@ -1,69 +1,176 @@
 <script>
+  import { translator as i18n } from '../stores/i18n.js'
   import { theme, THEMES } from '../stores/theme.js'
+  import Dialog from './Dialog.svelte'
   import Icon from './Icon.svelte'
-
   export let onClose = () => {}
 </script>
 
-<div class="overlay" role="dialog" aria-modal="true" aria-label="Theme picker" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onClose() }} onkeydown={(e) => { if (e.key === 'Escape') onClose() }}>
-  <div class="picker">
-    <div class="picker-header">
-      <span>Theme</span>
-      <button onclick={onClose}><Icon name="x" size={14} /></button>
-    </div>
-    <div class="theme-list">
-      {#each THEMES as t}
-        <button
-          class="theme-item"
-          class:active={$theme === t.id}
-          onclick={() => { theme.set(t.id); onClose() }}
-          data-theme-preview={t.id}
-        >
-          <span class="swatch" data-theme={t.id}></span>
-          <span>{t.label}</span>
-          {#if $theme === t.id}
-            <span class="active-mark"><Icon name="check" size={12} /></span>
-          {/if}
-        </button>
-      {/each}
-    </div>
+<Dialog title={$i18n('Appearance')} {onClose}>
+  <p class="intro">
+    {$i18n('Choose your design. Changes are saved automatically.')}
+  </p>
+  <div class="designs">
+    {#each [...THEMES].sort( (a, b) => (a.id === 'light' ? -1 : b.id === 'light' ? 1 : 0) ) as design}
+      <button
+        class="design"
+        class:active={$theme === design.id}
+        aria-pressed={$theme === design.id}
+        onclick={() => theme.set(design.id)}
+      >
+        <span class="preview" data-design={design.id} aria-hidden="true">
+          <span class="rail"><i></i><i></i><i></i><i></i></span>
+          <span class="canvas"
+            ><span class="preview-heading"></span><span class="preview-tools"
+            ></span><span class="preview-row"></span><span class="preview-row"
+            ></span><span class="preview-row"></span></span
+          >
+        </span>
+        <span class="design-label"
+          >{$i18n(design.label)}
+          {#if $theme === design.id}<Icon name="check" size={17} />{/if}
+        </span>
+      </button>
+    {/each}
   </div>
-</div>
+  <div class="dialog-footer">
+    <button class="dialog-primary" onclick={onClose}>{$i18n('Done')}</button>
+  </div>
+</Dialog>
 
 <style>
-  .overlay {
-    position: fixed; inset: 0; z-index: 900;
-    display: flex; align-items: flex-start; justify-content: flex-end;
-    padding: 4.5rem 1rem 0;
+  .intro {
+    color: var(--text2);
+    margin-bottom: 20px;
+    font-size: 14px;
   }
-  .picker {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 9px; width: 224px; box-shadow: var(--shadow);
-    overflow: hidden;
+  .designs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
   }
-  .picker-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0.8rem 0.9rem; border-bottom: 1px solid var(--border);
-    font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em;
-  }
-  .picker-header button { background: none; border: none; color: var(--text2); cursor: pointer; display: flex; }
-  .theme-list { padding: 0.3rem; }
-  .theme-item {
-    display: flex; align-items: center; gap: 0.7rem;
-    width: 100%; background: none; border: none; color: var(--text);
-    padding: 0.65rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem;
+  .designs .design {
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    min-width: 0;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 10px;
     text-align: left;
   }
-  .theme-item:hover { background: var(--row-hover); }
-  .theme-item.active { color: var(--accent); }
-  .active-mark { margin-left: auto; color: var(--accent); display: flex; }
-  .swatch {
-    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0;
+  .designs .design:hover {
+    border-color: var(--text3);
   }
-  /* Swatch Farben */
-  .swatch[data-theme="dark"]      { background: #172235; }
-  .swatch[data-theme="light"]     { background: #1565c0; }
-  .swatch[data-theme="nord"]      { background: #88c0d0; }
-  .swatch[data-theme="solarized"] { background: #268bd2; }
-  .swatch[data-theme="gruvbox"]   { background: #d79921; }
+  .designs .design.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+  }
+  .preview {
+    --paper: #ffffff;
+    --ink: #234232;
+    --highlight: #d2e5c3;
+    --rule: #dde5df;
+    display: flex;
+    width: 100%;
+    height: 94px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--paper);
+  }
+  .preview[data-design='ocean'] {
+    --ink: #142e52;
+    --highlight: #b9d5ff;
+    --rule: #d9e3f0;
+  }
+  .preview[data-design='violet'] {
+    --ink: #372447;
+    --highlight: #dfc6ff;
+    --rule: #e4deed;
+  }
+  .preview[data-design='dark'] {
+    --paper: #1d2531;
+    --ink: #111823;
+    --highlight: #aacafe;
+    --rule: #354152;
+  }
+  .preview[data-design='nord'] {
+    --paper: #2e3440;
+    --ink: #202834;
+    --highlight: #a3d6e1;
+    --rule: #465267;
+  }
+  .preview[data-design='solarized'] {
+    --paper: #073642;
+    --ink: #001e28;
+    --highlight: #8ad9d5;
+    --rule: #205461;
+  }
+  .preview[data-design='gruvbox'] {
+    --paper: #282828;
+    --ink: #191c1b;
+    --highlight: #e9c783;
+    --rule: #49453d;
+  }
+  .rail {
+    width: 29%;
+    background: var(--ink);
+    padding: 14px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .rail i {
+    height: 4px;
+    width: 70%;
+    border-radius: 2px;
+    background: var(--highlight);
+    opacity: 0.4;
+  }
+  .rail i:nth-child(2) {
+    width: 100%;
+    height: 10px;
+    opacity: 1;
+  }
+  .canvas {
+    padding: 12px 8px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .preview-heading {
+    width: 65%;
+    height: 5px;
+    background: var(--highlight);
+    border-radius: 2px;
+  }
+  .preview-tools {
+    width: 80%;
+    height: 3px;
+    background: var(--rule);
+  }
+  .preview-row {
+    height: 9px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .design-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5px;
+    padding: 9px 5px 5px;
+    font-weight: 500;
+    width: 100%;
+  }
+  .design-label :global(svg) {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  @media (max-width: 480px) {
+    .designs {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+  }
 </style>

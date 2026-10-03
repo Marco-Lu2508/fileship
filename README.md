@@ -14,19 +14,21 @@ Fileship gives teams a fast web workspace for browsing, organizing, previewing, 
 ### File workspace
 
 - Browse folders with breadcrumbs and fast folder navigation
-- List view and persistent grid view
+- Persistent list, grid and image gallery views
 - Responsive workspace with mobile navigation, file-type filters and quick-access favorites
 - Page navigation for large folders, with sorting across the complete folder
 - Sort by name, size and modification date
 - Instant filtering plus recursive server-side search
-- Multi-select with keyboard shortcuts
+- Multi-select, Shift range selection and keyboard shortcuts with built-in help
 - Drag and drop files into folders
 - Upload individual files or complete folder trees
 - Upload progress, failure details and retry actions
 - Create empty files and folders from the UI
-- Rename, copy, move and delete items
+- Rename, copy and move items with a destination folder explorer and new-folder creation
+- Copy/cut/paste inside the workspace; existing destinations are never overwritten
+- File properties, recursive directory sizes, image dimensions and on-demand checksums
 - Recoverable deletion across separate Docker volumes; interrupted uploads preserve existing files
-- Download files, folders as ZIP, or selected items as one archive
+- Download files, folders or selected items as ZIP, TAR or TAR.GZ archives
 - Extract ZIP archives
 
 ### Preview and editing
@@ -34,13 +36,16 @@ Fileship gives teams a fast web workspace for browsing, organizing, previewing, 
 - Stream images, video and audio directly in the browser
 - Preview PDFs in the built-in viewer
 - Read common text and source formats
+- Formatted Markdown with a source toggle and sanitized HTML
+- Previous/next preview navigation and fit/original-size image viewing
 - Edit text files with a line-numbered editor
 - Save changes with keyboard-friendly controls
 - Download any file, including formats without an inline preview
 
 ### Sharing and access
 
-- Public share links with optional expiration
+- Public download links with expiration, password protection and download limits
+- Manage, copy and revoke existing share links
 - Multiple users with separate home directories
 - Per-user storage quotas
 - Per-user allowed MIME type restrictions
@@ -55,9 +60,13 @@ Fileship gives teams a fast web workspace for browsing, organizing, previewing, 
 - SQLite storage, no database service required
 - Persistent Docker volumes for files and database
 - Embedded frontend in the Go binary
-- Five built-in themes: Dark, Light, Nord, Solarized and Gruvbox
+- Seven complete designs with live previews: Light, Ocean, Violet, Dark, Nord, Solarized and Gruvbox
+- English, German, French, Spanish, Italian and Portuguese interfaces, including dialogs and administration
+- Browser preferences for hidden files, single/double-click opening and precise dates
 - Configurable upload size and optional HTTPS
 - Minimal Alpine runtime image
+
+The classic File Browser workflow comparison and current scope are documented in [docs/filebrowser-workflows.md](docs/filebrowser-workflows.md).
 
 ## Quick Start With Docker Compose
 
