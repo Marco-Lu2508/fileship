@@ -1,0 +1,9 @@
+# Build this checkout instead of pulling the separately published GitHub image.
+# Use together with docker-compose.yml so the same environment and volumes apply.
+services:
+  fileship:
+    image: fileship:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile

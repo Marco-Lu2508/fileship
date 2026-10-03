@@ -108,7 +108,36 @@ docker compose logs -f fileship
 
 If `ADMIN_PASSWORD` is empty, Fileship generates an initial password and prints it to the container logs. Set the variable before exposing the service.
 
-## Updating
+## Build directly from the repository
+
+The published Compose file pulls `ghcr.io/marco-lu2508/fileship:latest`. The GitHub workflow builds and publishes that image when `main` is updated. A push only to the Forgejo mirror does not trigger it. To build a specific checkout yourself, run on your Docker host:
+
+```bash
+git clone https://github.com/Marco-Lu2508/fileship.git
+cd fileship
+```
+
+Create `.env` as described above, then build and start:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+The build override uses the local checkout and inherits the base file's ports, environment and persistent volumes. Docker must be able to reach the package registries for the first build. You can also clone the Forgejo mirror at `https://forgejo.lutz.home/marco/fileship.git` if your Docker host can reach it.
+
+For later updates, run these commands in that same checkout:
+
+```bash
+git pull --ff-only
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.build.yml ps
+```
+
+If an existing installation already contains files or users, keep its existing `.env`, volume mounts and Compose project name. Do not start an unrelated project with fresh volumes when migrating an existing installation. Custom proxy, network and mount settings belong in your deployment configuration; preserve them when adding the build override.
+
+Compose override merging is described in the [Docker documentation](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/).
+
+## Updating the published GitHub image
 
 The Compose file uses `pull_policy: always`, so the current `latest` image is pulled automatically:
 

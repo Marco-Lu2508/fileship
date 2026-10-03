@@ -2,6 +2,7 @@
 .env
 **/node_modules
 frontend/dist
+internal/static/dist
 data
 *.db
 *.db-shm
