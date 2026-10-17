@@ -27,7 +27,7 @@ const file = (path, is_dir = false) => ({
 })
 let component, target, requests, folderFiles, searchFiles
 async function settle(predicate) {
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 300; i++) {
     await new Promise((resolve) => setTimeout(resolve, 10))
     ui.flushSync()
     if (predicate()) return

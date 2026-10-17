@@ -20,10 +20,18 @@ function render(Component, props) {
   instances.push({ instance, target })
   return { instance, target }
 }
-async function settle() {
-  for (let i = 0; i < 5; i++) {
-    await Promise.resolve()
+async function settle(predicate) {
+  for (let i = 0; i < 200; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 10))
     flushSync()
+    if (predicate) {
+      if (predicate()) return
+    } else if (i >= 3) {
+      return
+    }
+  }
+  if (predicate && !predicate()) {
+    assert.fail('component did not reach the expected state')
   }
 }
 const file = (path, mime_type = 'text/plain') => ({
@@ -78,11 +86,11 @@ test('preview ignores text decoding that finishes after navigating to another fi
   flushSync(() => {
     instance.file = file('second.txt')
   })
-  await settle()
+  await settle(() => target.querySelector('pre'))
   assert.equal(firstSignal.aborted, true)
   assert.equal(target.querySelector('pre').textContent, 'Second file content')
   release('Late first file content')
-  await settle()
+  await settle(() => target.querySelector('pre'))
   assert.equal(target.querySelector('pre').textContent, 'Second file content')
   assert.equal(
     new URL(target.querySelector('a[download]').href).searchParams.get('path'),
@@ -111,9 +119,9 @@ test('closing a preview aborts pending text and does not leak it into a reopened
   flushSync(() => {
     instance.file = file('reopened.txt')
   })
-  await settle()
+  await settle(() => target.querySelector('pre'))
   release(new Response('Old text'))
-  await settle()
+  await settle(() => target.querySelector('pre'))
   assert.equal(target.querySelector('pre').textContent, 'New text')
 })
 
@@ -156,7 +164,7 @@ test('translating and refreshing file metadata preserve a loaded preview', async
   flushSync(() => {
     instance.file = { ...file('stable.txt'), size: 100 }
   })
-  await settle()
+  await settle(() => target.querySelector('pre'))
   assert.equal(loads, 1)
   assert.equal(target.querySelector('pre').textContent, 'Persistent text')
 })
