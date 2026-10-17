@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 
 	"github.com/yourname/fileship/internal/auth"
+	"github.com/yourname/fileship/internal/db"
 	fsvc "github.com/yourname/fileship/internal/fs"
 	"github.com/yourname/fileship/internal/middleware"
+	"github.com/yourname/fileship/internal/model"
 )
 
 // checkPerm prüft eine Permission und schreibt 403 wenn verweigert.
@@ -50,6 +52,14 @@ func (h *Handler) checkTransfer(w http.ResponseWriter, r *http.Request, src, dst
 		http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 		return false
 	}
+	var permissions []model.PathPermission
+	if !claims.IsAdmin {
+		permissions, err = h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return false
+		}
+	}
 	var size int64
 	err = filepath.Walk(source, func(current string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -66,20 +76,12 @@ func (h *Handler) checkTransfer(w http.ResponseWriter, r *http.Request, src, dst
 		target := filepath.ToSlash(filepath.Join(dst, suffix))
 		if !claims.IsAdmin {
 			for _, check := range []struct{ path, action string }{{original, "read"}, {target, "write"}} {
-				allowed, err := h.db.CheckPermission(claims.UserID, check.path, check.action)
-				if err != nil {
-					return err
-				}
-				if !allowed {
+				if !db.PathPermissionAllowed(permissions, check.path, check.action) {
 					return fmt.Errorf("permission denied for path: %s", check.path)
 				}
 			}
 			if moving {
-				allowed, err := h.db.CheckPermission(claims.UserID, original, "write")
-				if err != nil {
-					return err
-				}
-				if !allowed {
+				if !db.PathPermissionAllowed(permissions, original, "write") {
 					return fmt.Errorf("permission denied for path: %s", original)
 				}
 			}

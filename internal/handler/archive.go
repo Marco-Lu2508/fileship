@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/json"
-	fsvc "github.com/yourname/fileship/internal/fs"
 	"net/http"
+
+	"github.com/yourname/fileship/internal/db"
+	fsvc "github.com/yourname/fileship/internal/fs"
 )
 
 func (h *Handler) downloadArchive(w http.ResponseWriter, r *http.Request) {
@@ -42,9 +44,18 @@ func (h *Handler) serveArchive(w http.ResponseWriter, r *http.Request, paths []s
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	for _, entry := range entries {
-		if !h.checkPerm(w, r, entry.Name, "read") {
+	claims, _ := h.claimsUser(r)
+	if !claims.IsAdmin {
+		perms, err := h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
+		}
+		for _, entry := range entries {
+			if !db.PathPermissionAllowed(perms, entry.Name, "read") {
+				http.Error(w, "permission denied for path: "+entry.Name, http.StatusForbidden)
+				return
+			}
 		}
 	}
 	w.Header().Set("Content-Type", mime)

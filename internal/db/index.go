@@ -106,11 +106,10 @@ func (d *DB) IndexDelete(userID int64, relPath string) {
 
 // IndexRename benennt Einträge im Index um
 func (d *DB) IndexRename(userID int64, oldRel, newRel string) {
-	d.Exec(`UPDATE file_index SET rel_path = replace(rel_path, ?, ?) WHERE user_id = ? AND (rel_path = ? OR rel_path LIKE ?)`,
-		oldRel, newRel, userID, oldRel, oldRel+"/%")
-	// name für root-Eintrag anpassen
-	d.Exec(`UPDATE file_index SET name = ? WHERE user_id = ? AND rel_path = ?`,
-		filepath.Base(newRel), userID, newRel)
+	d.Exec(`UPDATE file_index SET rel_path = ? || substr(rel_path, length(?) + 1) WHERE user_id = ? AND rel_path LIKE ?`,
+		newRel, oldRel, userID, oldRel+"/%")
+	d.Exec(`UPDATE file_index SET rel_path = ?, name = ? WHERE user_id = ? AND rel_path = ?`,
+		newRel, filepath.Base(newRel), userID, oldRel)
 }
 
 // IndexCountForUser gibt die Anzahl indizierter Dateien zurück
@@ -178,6 +177,7 @@ func walkAndIndex(d *DB, userID int64, rootPath string) error {
 		return err
 	}
 
+	walkStart := time.Now().UTC().Format(time.RFC3339)
 	const batchSize = 500
 	var batch []model.FileInfo
 
@@ -199,11 +199,8 @@ func walkAndIndex(d *DB, userID int64, rootPath string) error {
 		if rel == "." {
 			return nil
 		}
-		// Hidden files überspringen
-		if strings.HasPrefix(filepath.Base(path), ".") {
-			if e.IsDir() {
-				return filepath.SkipDir
-			}
+		// Temporäre Upload-Dateien überspringen
+		if strings.HasPrefix(filepath.Base(path), ".fileship-upload-") {
 			return nil
 		}
 
@@ -231,7 +228,11 @@ func walkAndIndex(d *DB, userID int64, rootPath string) error {
 	if err != nil {
 		return err
 	}
-	return flush()
+	if err := flush(); err != nil {
+		return err
+	}
+	_, _ = d.Exec(`DELETE FROM file_index WHERE user_id = ? AND root_path = ? AND indexed_at < ?`, userID, rootAbs, walkStart)
+	return nil
 }
 
 func mimeTypeFromName(name string) string {

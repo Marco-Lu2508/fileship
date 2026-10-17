@@ -4,12 +4,20 @@ import { csrfHeaders, ensureCSRFToken } from '../lib/csrf.js'
 export const user = writable(null)
 export const accessToken = writable(localStorage.getItem('access_token') || '')
 export const twoFAPending = writable(null) // { pending_token } wenn 2FA nötig
+export const activeSourceId = writable(null)
+export const activeAgentId = writable(null)
 
 let refreshTimer = null
 let refreshPromise = null
+let refreshSessionVersion = -1
 let sessionVersion = 0
 
+export function getSessionVersion() {
+  return sessionVersion
+}
+
 export async function login(username, password) {
+  const version = ++sessionVersion
   await ensureCSRFToken()
   const res = await fetch('/api/auth/login', {
     method: 'POST',
@@ -18,6 +26,7 @@ export async function login(username, password) {
   })
   if (!res.ok) throw new Error('Invalid credentials')
   const data = await res.json()
+  if (version !== sessionVersion) return { requires2fa: false }
 
   // 2FA erforderlich
   if (data.requires_2fa) {
@@ -31,6 +40,7 @@ export async function login(username, password) {
 }
 
 export async function verify2FA(pendingToken, code) {
+  const version = ++sessionVersion
   await ensureCSRFToken()
   const res = await fetch('/api/auth/2fa/verify', {
     method: 'POST',
@@ -39,6 +49,7 @@ export async function verify2FA(pendingToken, code) {
   })
   if (!res.ok) throw new Error('Invalid 2FA code')
   const data = await res.json()
+  if (version !== sessionVersion) return
   twoFAPending.set(null)
   setTokens(data)
   await fetchMe()
@@ -60,23 +71,26 @@ export async function logout() {
 }
 
 export async function fetchMe() {
+  const version = sessionVersion
   const res = await apiFetch('/api/me')
   if (res.ok) {
     const profile = await res.json()
-    if (get(accessToken)) user.set(profile)
+    if (version === sessionVersion && get(accessToken)) user.set(profile)
   }
 }
 
 export async function refreshTokens() {
-  if (refreshPromise) return refreshPromise
+  if (refreshPromise && refreshSessionVersion === sessionVersion)
+    return refreshPromise
   const version = sessionVersion
-  refreshPromise = (async () => {
+  const promise = (async () => {
     const refresh = localStorage.getItem('refresh_token')
     if (!refresh) {
       clearTokens()
       return
     }
     await ensureCSRFToken()
+    if (version !== sessionVersion) return
     const res = await fetch('/api/auth/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
@@ -88,15 +102,17 @@ export async function refreshTokens() {
       return
     }
     const tokens = await res.json()
-    if (version === sessionVersion) setTokens(tokens)
+    if (version === sessionVersion) setTokens(tokens, false)
   })().finally(() => {
-    refreshPromise = null
+    if (refreshPromise === promise) refreshPromise = null
   })
-  return refreshPromise
+  refreshPromise = promise
+  refreshSessionVersion = version
+  return promise
 }
 
-function setTokens({ access_token, refresh_token }) {
-  sessionVersion++
+function setTokens({ access_token, refresh_token }, newSession = true) {
+  if (newSession) sessionVersion++
   localStorage.setItem('access_token', access_token)
   localStorage.setItem('refresh_token', refresh_token)
   accessToken.set(access_token)
@@ -115,24 +131,39 @@ function clearTokens() {
   accessToken.set('')
   user.set(null)
   twoFAPending.set(null)
+  activeSourceId.set(null)
+  activeAgentId.set(null)
   clearTimeout(refreshTimer)
 }
 
 export async function apiFetch(url, options = {}, retry = true) {
-  if (options.method && options.method !== 'GET' && options.method !== 'HEAD')
-    await ensureCSRFToken()
+  const version = sessionVersion
+  const method = (options.method || 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') await ensureCSRFToken()
+  if (version !== sessionVersion)
+    throw new DOMException('Request cancelled', 'AbortError')
   const token = get(accessToken)
+  const headers = new Headers(options.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  const agentId = get(activeAgentId)
+  const sourceId = get(activeSourceId)
+  if (agentId) headers.set('X-Agent-ID', String(agentId))
+  else if (sourceId) headers.set('X-Source-ID', String(sourceId))
+  for (const [name, value] of Object.entries(csrfHeaders()))
+    headers.set(name, value)
   const res = await fetch(url, {
     ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-      ...csrfHeaders()
-    }
+    headers
   })
-  if (res.status === 401 && retry && localStorage.getItem('refresh_token')) {
-    await refreshTokens()
-    if (get(accessToken)) return apiFetch(url, options, false)
+  if (res.status === 401 && retry && version === sessionVersion) {
+    // Another request may already have rotated the expired token.
+    if (token !== get(accessToken) && get(accessToken))
+      return apiFetch(url, options, false)
+    if (localStorage.getItem('refresh_token')) {
+      await refreshTokens()
+      if (version === sessionVersion && get(accessToken))
+        return apiFetch(url, options, false)
+    }
   }
   return res
 }

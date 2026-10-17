@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
 	"strings"
@@ -30,17 +31,17 @@ func CSRF(tlsEnabled bool) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if strings.HasPrefix(r.URL.Path, "/webdav") {
+			if strings.HasPrefix(r.URL.Path, "/webdav") || strings.HasPrefix(r.URL.Path, "/s/") {
 				next.ServeHTTP(w, r)
 				return
 			}
 			cookie, err := r.Cookie("csrf_token")
-			if err != nil {
+			if err != nil || cookie.Value == "" {
 				http.Error(w, "missing csrf token", http.StatusForbidden)
 				return
 			}
 			header := r.Header.Get("X-CSRF-Token")
-			if header == "" || header != cookie.Value {
+			if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie.Value)) != 1 {
 				http.Error(w, "invalid csrf token", http.StatusForbidden)
 				return
 			}

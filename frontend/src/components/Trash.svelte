@@ -5,6 +5,7 @@
   import { apiFetch } from '../stores/auth.js'
   import { success, error } from '../stores/toast.js'
   import { loadFiles, currentPath } from '../stores/files.js'
+  import { formatBytes } from '../lib/files.js'
   import { get } from 'svelte/store'
   import Icon from './Icon.svelte'
 
@@ -63,10 +64,7 @@
   }
 
   function fmt(b) {
-    if (!b) return '—'
-    const u = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(b) / Math.log(1024))
-    return (b / 1024 ** i).toFixed(1) + ' ' + u[i]
+    return b ? formatBytes(b, $locale) : '—'
   }
 
   function daysLeft(expiresAt) {

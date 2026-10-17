@@ -8,7 +8,9 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/yourname/fileship/internal/db"
 	fsvc "github.com/yourname/fileship/internal/fs"
+	"github.com/yourname/fileship/internal/model"
 	"hash"
 	"image"
 	_ "image/gif"
@@ -69,6 +71,16 @@ func (h *Handler) fileInfo(w http.ResponseWriter, r *http.Request) {
 	}{Name: info.Name(), Path: path, Size: info.Size(), IsDir: info.IsDir(), ModTime: info.ModTime(), Mode: info.Mode().String()}
 	if info.IsDir() {
 		result.Size = 0
+		claims, _ := h.claimsUser(r)
+		var perms []model.PathPermission
+		if !claims.IsAdmin {
+			var permErr error
+			perms, permErr = h.db.ListPathPermissions(claims.UserID)
+			if permErr != nil {
+				http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+				return
+			}
+		}
 		err = filepath.Walk(abs, func(current string, entry os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -86,13 +98,8 @@ func (h *Handler) fileInfo(w http.ResponseWriter, r *http.Request) {
 			if relErr != nil {
 				return relErr
 			}
-			claims, _ := h.claimsUser(r)
 			if !claims.IsAdmin {
-				allowed, permErr := h.db.CheckPermission(claims.UserID, filepath.ToSlash(rel), "read")
-				if permErr != nil {
-					return permErr
-				}
-				if !allowed {
+				if !db.PathPermissionAllowed(perms, filepath.ToSlash(rel), "read") {
 					if entry.IsDir() {
 						return filepath.SkipDir
 					}

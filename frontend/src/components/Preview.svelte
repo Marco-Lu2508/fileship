@@ -1,36 +1,204 @@
 <script>
   import Modal from './Modal.svelte'
   import { translator as i18n } from '../stores/i18n.js'
-  import { apiFetch } from '../stores/auth.js'
+  import {
+    accessToken,
+    apiFetch,
+    activeSourceId,
+    activeAgentId
+  } from '../stores/auth.js'
+  import { getSourceParam } from '../stores/sources.js'
   import Icon from './Icon.svelte'
   import { onDestroy } from 'svelte'
   import { renderMarkdown } from '../lib/markdown.js'
+  import { fileKind } from '../lib/files.js'
 
   export let file = null
   export let onClose = () => {}
   export let siblings = [],
     onNavigate = () => {}
   let fullSize = false,
+    theaterMode = false,
     previousPath = ''
   let rawMarkdown = false
+  let playbackRate = 1
+  let loopMedia = false
+  let autoNext = true
+  let mediaPaused = true
+  let currentTime = 0
+  let duration = 0
+  let videoEl = null
+  let audioEl = null
+  let visualizerCanvas = null
+  let animFrame = null
+  let volume = 1
+  let isMuted = false
+
+  const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
   $: markdown =
     extension === 'md' && !rawMarkdown ? renderMarkdown(textContent) : ''
   $: position = siblings.findIndex((f) => f.path === file?.path)
+  $: audioSiblings = siblings.filter((s) => fileKind(s) === 'audio')
   $: if (file?.path !== previousPath) {
     previousPath = file?.path || ''
     fullSize = false
+    currentTime = 0
+    duration = 0
+    mediaPaused = true
   }
   function navigate(offset) {
-    if (position + offset >= 0 && position + offset < siblings.length)
+    if (
+      position >= 0 &&
+      position + offset >= 0 &&
+      position + offset < siblings.length
+    )
       onNavigate(siblings[position + offset])
   }
 
-  let url = ''
+  function activeMedia() {
+    return isVideo ? videoEl : isAudio ? audioEl : null
+  }
+
+  function handleSeek(e) {
+    const val = parseFloat(e.target.value)
+    const el = activeMedia()
+    if (el && Number.isFinite(val)) {
+      el.currentTime = val
+      currentTime = val
+    }
+  }
+
+  function handleVolumeChange(e) {
+    const val = parseFloat(e.target.value)
+    volume = val
+    const el = activeMedia()
+    if (el) {
+      el.volume = val
+      el.muted = val === 0
+      isMuted = val === 0
+    }
+  }
+
+  function toggleMute() {
+    const el = activeMedia()
+    if (!el) return
+    isMuted = !isMuted
+    el.muted = isMuted
+    if (!isMuted && el.volume === 0) {
+      volume = 1
+      el.volume = 1
+    }
+  }
+
+  function togglePlay() {
+    const el = activeMedia()
+    if (!el) return
+    if (el.paused) el.play?.().catch(() => {})
+    else el.pause?.()
+  }
+
+  function skipBy(seconds) {
+    const el = activeMedia()
+    if (!el) return
+    const max = Number.isFinite(el.duration) ? el.duration : Infinity
+    el.currentTime = Math.max(0, Math.min(max, (el.currentTime || 0) + seconds))
+  }
+
+  function setSpeed(rate) {
+    playbackRate = rate
+    const el = activeMedia()
+    if (el) el.playbackRate = rate
+  }
+
+  function togglePiP() {
+    if (!videoEl) return
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture?.().catch(() => {})
+    } else {
+      videoEl.requestPictureInPicture?.().catch(() => {})
+    }
+  }
+
+  function captureSnapshot() {
+    if (!videoEl || !videoEl.videoWidth) return
+    const canvas = document.createElement('canvas')
+    canvas.width = videoEl.videoWidth
+    canvas.height = videoEl.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL('image/png')
+    link.download = `${file?.name || 'video'}-snapshot.png`
+    document.body.append(link)
+    link.click()
+    link.remove()
+  }
+
+  function handleMediaEnded() {
+    mediaPaused = true
+    if (loopMedia) return
+    if (autoNext && position >= 0 && position + 1 < siblings.length) {
+      navigate(1)
+    }
+  }
+
+  function formatMediaTime(sec) {
+    if (!Number.isFinite(sec) || sec < 0) return '0:00'
+    const total = Math.floor(sec)
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return `${m}:${s < 10 ? '0' : ''}${s}`
+  }
+
+  function drawAudioVisualizer() {
+    if (!visualizerCanvas || !isAudio) return
+    const ctx = visualizerCanvas.getContext('2d')
+    if (!ctx) return
+    const w = visualizerCanvas.width
+    const h = visualizerCanvas.height
+    ctx.clearRect(0, 0, w, h)
+    const bars = 36
+    const gap = 4
+    const barW = (w - gap * (bars - 1)) / bars
+    const t = performance.now() / 180
+    for (let i = 0; i < bars; i++) {
+      const wave = mediaPaused
+        ? 0.14
+        : 0.2 +
+          0.75 * Math.abs(Math.sin(t + i * 0.35) * Math.cos(t * 0.7 - i * 0.18))
+      const barH = Math.max(6, Math.round(wave * (h - 8)))
+      const x = i * (barW + gap)
+      const y = h - barH
+      ctx.fillStyle = mediaPaused ? 'rgba(148,163,184,0.35)' : '#5ca7ff'
+      ctx.beginPath()
+      ctx.roundRect?.(x, y, barW, barH, 3) ?? ctx.rect(x, y, barW, barH)
+      ctx.fill()
+    }
+    if (!destroyed && isAudio) {
+      animFrame = requestAnimationFrame(drawAudioVisualizer)
+    }
+  }
+
+  $: if (
+    isAudio &&
+    visualizerCanvas &&
+    typeof requestAnimationFrame === 'function'
+  ) {
+    if (animFrame) cancelAnimationFrame(animFrame)
+    animFrame = requestAnimationFrame(drawAudioVisualizer)
+  }
+
   let previewRequest = 0
+  let previewController = null
+  let destroyed = false
   let loading = false
   let loadError = false
   $: mime = file?.mime_type || ''
-  $: extension = file?.name?.split('.').pop()?.toLowerCase() || ''
+  $: extension = file?.name?.includes('.')
+    ? file.name.split('.').pop()?.toLowerCase() || ''
+    : ''
   $: isImage =
     mime.startsWith('image/') ||
     ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(extension)
@@ -62,52 +230,77 @@
     ].includes(extension)
 
   let textContent = ''
+  $: previewPath = file?.path ?? null
+  $: token = encodeURIComponent($accessToken)
+  $: sourceSuffix = getSourceParam($activeSourceId, $activeAgentId)
   $: previewUrl = file
-    ? `/api/files/preview?path=${encodeURIComponent(file.path)}&access_token=${encodeURIComponent(localStorage.getItem('access_token') || '')}`
+    ? `/api/files/preview?path=${encodeURIComponent(file.path)}&access_token=${token}${sourceSuffix}`
     : ''
-  $: if (file) loadPreview(file)
+  $: downloadUrl = file
+    ? `/api/files/download?path=${encodeURIComponent(file.path)}&access_token=${token}${sourceSuffix}`
+    : ''
+  $: loadPreview(previewPath, isText)
 
-  async function loadPreview(currentFile) {
+  async function loadPreview(path, textFile) {
+    previewController?.abort()
     const request = ++previewRequest
-    loading = true
+    previewController = null
+    loading = path !== null && textFile
     loadError = false
-    if (url) URL.revokeObjectURL(url)
-    url = ''
     textContent = ''
-    if (!isText) {
-      url = previewUrl
-      loading = false
-      return
-    }
+    if (path === null || !textFile) return
+
+    const controller = new AbortController()
+    previewController = controller
     try {
       const res = await apiFetch(
-        `/api/files/download?path=${encodeURIComponent(currentFile.path)}`
+        `/api/files/download?path=${encodeURIComponent(path)}`,
+        { signal: controller.signal }
       )
-      if (!res.ok) throw new Error($i18n('preview failed'))
-      const blob = await res.blob()
-      if (request !== previewRequest) return
-      if (isText) {
-        textContent = await blob.text()
-        url = URL.createObjectURL(blob)
-      } else {
-        url = previewUrl
-      }
+      if (!res.ok) throw new Error('Preview failed')
+      const text = await res.text()
+      if (destroyed || request !== previewRequest || controller.signal.aborted)
+        return
+      textContent = text
       loading = false
     } catch {
-      if (request === previewRequest) {
+      if (
+        !destroyed &&
+        request === previewRequest &&
+        !controller.signal.aborted
+      ) {
         loading = false
         loadError = true
-        if (isText) textContent = $i18n('Could not load file.')
       }
+    } finally {
+      if (request === previewRequest) previewController = null
     }
   }
 
+  function mediaError(event) {
+    if (!destroyed && event.currentTarget.getAttribute('src') === previewUrl)
+      loadError = true
+  }
+
   onDestroy(() => {
-    if (url) URL.revokeObjectURL(url)
+    destroyed = true
+    previewRequest++
+    previewController?.abort()
+    if (animFrame && typeof cancelAnimationFrame === 'function')
+      cancelAnimationFrame(animFrame)
   })
 
   function handleKey(e) {
-    if (!file || e.target.closest('input,textarea,select')) return
+    if (
+      !file ||
+      e.defaultPrevented ||
+      e.altKey ||
+      e.ctrlKey ||
+      e.metaKey ||
+      e.shiftKey ||
+      e.target?.closest?.('input,textarea,select,[contenteditable]')
+    )
+      return
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       navigate(-1)
@@ -116,14 +309,22 @@
       e.preventDefault()
       navigate(1)
     }
+    if ((isVideo || isAudio) && e.key === ' ') {
+      e.preventDefault()
+      togglePlay()
+    }
   }
 </script>
 
 <svelte:window onkeydown={handleKey} />
 
 {#if file}
-  <Modal label={$i18n('Preview')} width="900px" {onClose}>
-    <div class="modal">
+  <Modal
+    label={$i18n('Preview')}
+    width={theaterMode ? '1160px' : '900px'}
+    {onClose}
+  >
+    <div class="modal" class:theater={theaterMode}>
       <div class="modal-header">
         <span class="filename">{file.name}</span>
         <div class="modal-actions">
@@ -138,7 +339,7 @@
             ><button
               class="btn"
               aria-label={$i18n('Next preview')}
-              disabled={position >= siblings.length - 1}
+              disabled={position < 0 || position >= siblings.length - 1}
               onclick={() => navigate(1)}
               ><Icon name="chevron_r" size={16} /></button
             >{/if}
@@ -147,6 +348,11 @@
               onclick={() => (fullSize = !fullSize)}
               >{fullSize ? $i18n('Fit image') : $i18n('Original size')}</button
             >{/if}
+          {#if isVideo}<button
+              class="btn"
+              onclick={() => (theaterMode = !theaterMode)}
+              >{theaterMode ? 'Standard' : 'Cinema'}</button
+            >{/if}
           {#if extension === 'md'}<button
               class="btn"
               onclick={() => (rawMarkdown = !rawMarkdown)}
@@ -154,7 +360,7 @@
                 ? $i18n('Formatted preview')
                 : $i18n('Source text')}</button
             >{/if}
-          <a href={url} download={file.name} class="btn">
+          <a href={downloadUrl} download={file.name} class="btn">
             <Icon name="download" size={13} />
             {$i18n('Download')}
           </a>
@@ -166,63 +372,273 @@
         </div>
       </div>
       <div class="modal-body">
-        {#if loading}
-          <div class="preview-state">
-            <span class="spinner"></span>
-            <p>{$i18n('Loading preview...')}</p>
-          </div>
-        {:else if loadError}
-          <div class="preview-state">
-            <Icon name="warning" size={32} />
-            <p>{$i18n('Preview could not be loaded.')}</p>
-          </div>
-        {:else if isImage}
-          <img
-            class:full-size={fullSize}
-            src={url}
-            alt={file.name}
-            onload={() => (loading = false)}
-            onerror={() => (loadError = true)}
-          />
-        {:else if isVideo}
-          <div class="video-stage">
-            <video
-              controls
-              playsinline
-              preload="metadata"
+        {#key previewPath}
+          {#if loading}
+            <div class="preview-state">
+              <span class="spinner"></span>
+              <p>{$i18n('Loading preview...')}</p>
+            </div>
+          {:else if loadError}
+            <div class="preview-state">
+              <Icon name="warning" size={32} />
+              <p>{$i18n('Preview could not be loaded.')}</p>
+            </div>
+          {:else if isImage}
+            <img
+              class:full-size={fullSize}
               src={previewUrl}
-              oncanplay={() => (loading = false)}
-              onerror={() => (loadError = true)}
-              ><track kind="captions" /></video
-            >
-          </div>
-        {:else if isAudio}
-          <audio
-            controls
-            src={previewUrl}
-            oncanplay={() => (loading = false)}
-            onerror={() => (loadError = true)}
-          ></audio>
-        {:else if isPdf}
-          <iframe
-            src={previewUrl}
-            title={file.name}
-            onload={() => (loading = false)}
-          ></iframe>
-        {:else if isText}
-          {#if extension === 'md' && !rawMarkdown}<article class="markdown">
-              {@html markdown}
-            </article>{:else}<pre>{textContent}</pre>{/if}
-        {:else}
-          <div class="unsupported">
-            <Icon name="file" size={36} />
-            <p>{$i18n('No preview available')}</p>
-            <a href={url} download={file.name} class="btn primary">
-              <Icon name="download" size={13} />
-              {$i18n('Download')}
-            </a>
-          </div>
-        {/if}
+              alt={file.name}
+              onerror={mediaError}
+            />
+          {:else if isVideo}
+            <div class="media-studio">
+              <div class="video-stage">
+                <video
+                  bind:this={videoEl}
+                  controls
+                  playsinline
+                  width="960"
+                  height="540"
+                  preload="metadata"
+                  loop={loopMedia}
+                  src={previewUrl}
+                  onplay={() => {
+                    mediaPaused = false
+                    if (videoEl) {
+                      videoEl.playbackRate = playbackRate
+                      videoEl.volume = volume
+                      videoEl.muted = isMuted
+                    }
+                  }}
+                  onpause={() => (mediaPaused = true)}
+                  ontimeupdate={() => (currentTime = videoEl?.currentTime || 0)}
+                  ondurationchange={() => (duration = videoEl?.duration || 0)}
+                  onended={handleMediaEnded}
+                  onerror={mediaError}><track kind="captions" /></video
+                >
+              </div>
+              <div class="studio-timeline">
+                <input
+                  type="range"
+                  class="timeline-slider"
+                  min="0"
+                  max={duration || 100}
+                  step="0.1"
+                  value={currentTime}
+                  oninput={handleSeek}
+                  aria-label={$i18n('Seek position')}
+                />
+              </div>
+              <div class="studio-bar">
+                <div class="studio-left">
+                  <button class="btn" onclick={togglePlay}>
+                    {mediaPaused ? '▶ Play' : '⏸ Pause'}
+                  </button>
+                  <button class="btn" onclick={() => skipBy(-10)}>-10s</button>
+                  <button class="btn" onclick={() => skipBy(10)}>+10s</button>
+                  <span class="time-pill">
+                    {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
+                  </span>
+                  <div class="volume-control">
+                    <button
+                      class="volume-btn"
+                      onclick={toggleMute}
+                      aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    >
+                      <Icon
+                        name={isMuted || volume === 0 ? 'volume_off' : 'volume'}
+                        size={15}
+                      />
+                    </button>
+                    <input
+                      type="range"
+                      class="volume-slider"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={isMuted ? 0 : volume}
+                      oninput={handleVolumeChange}
+                      aria-label="Volume"
+                    />
+                  </div>
+                </div>
+                <div class="studio-right">
+                  <div
+                    class="speed-group"
+                    role="group"
+                    aria-label="Playback speed"
+                  >
+                    {#each speeds as s}
+                      <button
+                        class="speed-pill"
+                        class:active={playbackRate === s}
+                        onclick={() => setSpeed(s)}>{s}x</button
+                      >
+                    {/each}
+                  </div>
+                  <button
+                    class="btn"
+                    class:primary={loopMedia}
+                    onclick={() => (loopMedia = !loopMedia)}>🔁 Loop</button
+                  >
+                  <button
+                    class="btn"
+                    class:primary={autoNext}
+                    onclick={() => (autoNext = !autoNext)}>⏭ Auto-Next</button
+                  >
+                  <button class="btn" onclick={togglePiP}>📺 PiP</button>
+                  <button class="btn" onclick={captureSnapshot}
+                    >📸 Snapshot</button
+                  >
+                </div>
+              </div>
+            </div>
+          {:else if isAudio}
+            <div class="audio-studio">
+              <div class="audio-hero">
+                <div class="audio-disc" class:spinning={!mediaPaused}>
+                  <Icon name="audio" size={28} />
+                </div>
+                <div class="audio-meta">
+                  <strong>{file.name}</strong>
+                  <span
+                    >{formatMediaTime(currentTime)} / {formatMediaTime(
+                      duration
+                    )}</span
+                  >
+                </div>
+              </div>
+              <canvas
+                bind:this={visualizerCanvas}
+                class="audio-visualizer"
+                width="600"
+                height="72"
+              ></canvas>
+              <audio
+                bind:this={audioEl}
+                controls
+                preload="metadata"
+                loop={loopMedia}
+                src={previewUrl}
+                onplay={() => {
+                  mediaPaused = false
+                  if (audioEl) {
+                    audioEl.playbackRate = playbackRate
+                    audioEl.volume = volume
+                    audioEl.muted = isMuted
+                  }
+                }}
+                onpause={() => (mediaPaused = true)}
+                ontimeupdate={() => (currentTime = audioEl?.currentTime || 0)}
+                ondurationchange={() => (duration = audioEl?.duration || 0)}
+                onended={handleMediaEnded}
+                onerror={mediaError}
+              ></audio>
+              <div class="studio-timeline">
+                <input
+                  type="range"
+                  class="timeline-slider"
+                  min="0"
+                  max={duration || 100}
+                  step="0.1"
+                  value={currentTime}
+                  oninput={handleSeek}
+                  aria-label={$i18n('Seek position')}
+                />
+              </div>
+              <div class="studio-bar">
+                <div class="studio-left">
+                  <button class="btn" onclick={togglePlay}>
+                    {mediaPaused ? '▶ Play' : '⏸ Pause'}
+                  </button>
+                  <button class="btn" onclick={() => skipBy(-10)}>-10s</button>
+                  <button class="btn" onclick={() => skipBy(10)}>+10s</button>
+                  <div class="volume-control">
+                    <button
+                      class="volume-btn"
+                      onclick={toggleMute}
+                      aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    >
+                      <Icon
+                        name={isMuted || volume === 0 ? 'volume_off' : 'volume'}
+                        size={15}
+                      />
+                    </button>
+                    <input
+                      type="range"
+                      class="volume-slider"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={isMuted ? 0 : volume}
+                      oninput={handleVolumeChange}
+                      aria-label="Volume"
+                    />
+                  </div>
+                </div>
+                <div class="studio-right">
+                  <div
+                    class="speed-group"
+                    role="group"
+                    aria-label="Playback speed"
+                  >
+                    {#each speeds as s}
+                      <button
+                        class="speed-pill"
+                        class:active={playbackRate === s}
+                        onclick={() => setSpeed(s)}>{s}x</button
+                      >
+                    {/each}
+                  </div>
+                  <button
+                    class="btn"
+                    class:primary={loopMedia}
+                    onclick={() => (loopMedia = !loopMedia)}>🔁 Loop</button
+                  >
+                  <button
+                    class="btn"
+                    class:primary={autoNext}
+                    onclick={() => (autoNext = !autoNext)}>⏭ Auto-Next</button
+                  >
+                </div>
+              </div>
+              {#if audioSiblings.length > 1}
+                <div class="audio-playlist">
+                  <div class="playlist-head">
+                    Playlist ({audioSiblings.length})
+                  </div>
+                  <div class="playlist-items">
+                    {#each audioSiblings as track, idx}
+                      <button
+                        class="playlist-track"
+                        class:current={track.path === file.path}
+                        onclick={() => onNavigate(track)}
+                      >
+                        <span class="track-num">{idx + 1}.</span>
+                        <span class="track-name">{track.name}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {:else if isPdf}
+            <iframe src={previewUrl} title={file.name}></iframe>
+          {:else if isText}
+            {#if extension === 'md' && !rawMarkdown}<article class="markdown">
+                {@html markdown}
+              </article>{:else}<pre>{textContent}</pre>{/if}
+          {:else}
+            <div class="unsupported">
+              <Icon name="file" size={36} />
+              <p>{$i18n('No preview available')}</p>
+              <a href={downloadUrl} download={file.name} class="btn primary">
+                <Icon name="download" size={13} />
+                {$i18n('Download')}
+              </a>
+            </div>
+          {/if}
+        {/key}
       </div>
     </div>
   </Modal>
@@ -296,6 +712,9 @@
     flex-direction: column;
     overflow: hidden;
     box-shadow: var(--shadow);
+  }
+  .modal.theater {
+    max-width: 1160px;
   }
   .modal-header {
     display: flex;
@@ -372,8 +791,162 @@
     max-height: 75vh;
     object-fit: contain;
   }
+  .media-studio,
+  .audio-studio {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .audio-studio {
+    max-width: 680px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem;
+  }
+  .audio-hero {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+  }
+  .audio-disc {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 2px solid var(--accent);
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .audio-disc.spinning {
+    animation: spin 6s linear infinite;
+  }
+  .audio-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .audio-meta strong {
+    font-size: 0.95rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .audio-meta span {
+    font-size: 0.78rem;
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+  }
+  .audio-visualizer {
+    width: 100%;
+    height: 72px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .studio-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+  }
+  .studio-left,
+  .studio-right {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .time-pill {
+    font-size: 0.75rem;
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+    padding: 0 0.35rem;
+  }
+  .speed-group {
+    display: inline-flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .speed-pill {
+    background: transparent;
+    border: none;
+    color: var(--text2);
+    font-size: 0.72rem;
+    padding: 0.25rem 0.45rem;
+    cursor: pointer;
+  }
+  .speed-pill.active {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  .audio-playlist {
+    border-top: 1px solid var(--border);
+    padding-top: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .playlist-head {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .playlist-items {
+    max-height: 150px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .playlist-track {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 0.35rem 0.55rem;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+  }
+  .playlist-track:hover {
+    background: var(--row-hover);
+  }
+  .playlist-track.current {
+    background: var(--row-active);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .track-num {
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+  }
+  .track-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .video-stage {
-    width: min(100%, 860px);
+    width: 100%;
     aspect-ratio: 16 / 9;
     display: grid;
     place-items: center;
@@ -424,6 +997,89 @@
     gap: 0.75rem;
     color: var(--text2);
   }
+  .studio-timeline {
+    width: 100%;
+    padding: 0.15rem 0;
+  }
+  .timeline-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border);
+    border-radius: 9999px;
+    outline: none;
+    cursor: pointer;
+    transition: height 0.15s ease;
+  }
+  .timeline-slider:hover {
+    height: 8px;
+  }
+  .timeline-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+  .timeline-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+  .volume-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.25rem;
+  }
+  .volume-btn {
+    background: transparent;
+    border: none;
+    padding: 3px;
+    cursor: pointer;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+  }
+  .volume-btn:hover {
+    color: var(--text);
+  }
+  .volume-slider {
+    width: 64px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border);
+    border-radius: 9999px;
+    outline: none;
+    cursor: pointer;
+  }
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .volume-slider::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
   .spinner {
     width: 28px;
     height: 28px;
@@ -435,6 +1091,15 @@
   @keyframes spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .audio-disc.spinning,
+    .spinner {
+      animation: none !important;
+    }
+    .timeline-slider {
+      transition: none;
     }
   }
 </style>

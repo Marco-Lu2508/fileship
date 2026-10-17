@@ -9,6 +9,17 @@
   import TwoFA from './TwoFA.svelte'
   import { preferences } from '../stores/preferences.js'
   import { formatBytes } from '../lib/files.js'
+  import {
+    sources,
+    agents,
+    activeSourceId,
+    activeAgentId,
+    loadSources,
+    loadAgents,
+    selectLocalWorkspace,
+    selectRemoteAgent
+  } from '../stores/sources.js'
+  import { loadFiles } from '../stores/files.js'
 
   export let onClose = () => {}
 
@@ -30,10 +41,86 @@
   let newTokenExpiry = 0 // 0 = never, else days
   let createdToken = null // einmalig anzeigen
 
+  // Remote Agents & Sources
+  let newAgentName = ''
+  let newAgentRoot = './data'
+  let createdAgent = null
+  let newSourceName = ''
+  let newSourceRoot = ''
+
   onMount(async () => {
     await loadSettings()
     await loadTokens()
+    await loadAgents()
+    await loadSources()
   })
+
+  async function createAgentDevice() {
+    if (!newAgentName.trim()) {
+      error('Device name required')
+      return
+    }
+    const res = await apiFetch('/api/me/agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newAgentName.trim(),
+        root_path: newAgentRoot.trim() || './data'
+      })
+    })
+    if (!res.ok) {
+      error('Could not register device')
+      return
+    }
+    createdAgent = await res.json()
+    newAgentName = ''
+    success('Device registered — copy the agent start command below!')
+    await loadAgents()
+  }
+
+  async function removeAgentDevice(id) {
+    if (!confirm('Remove this remote device?')) return
+    await apiFetch(`/api/me/agents/${id}`, { method: 'DELETE' })
+    if ($activeAgentId === id) {
+      selectLocalWorkspace(null)
+      await loadFiles('')
+    }
+    await loadAgents()
+    success('Device removed')
+  }
+
+  async function createLocalSource() {
+    if (!newSourceName.trim() || !newSourceRoot.trim()) {
+      error('Name and path required')
+      return
+    }
+    const res = await apiFetch('/api/me/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newSourceName.trim(),
+        root_path: newSourceRoot.trim(),
+        is_default: false
+      })
+    })
+    if (!res.ok) {
+      error('Could not create source')
+      return
+    }
+    newSourceName = ''
+    newSourceRoot = ''
+    await loadSources()
+    success('Source added')
+  }
+
+  async function removeLocalSource(id) {
+    await apiFetch(`/api/me/sources/${id}`, { method: 'DELETE' })
+    if ($activeSourceId === id) {
+      selectLocalWorkspace(null)
+      await loadFiles('')
+    }
+    await loadSources()
+  }
 
   async function loadSettings() {
     settingsLoading = true
@@ -156,7 +243,7 @@
     <div class="modal-layout">
       <!-- Nav -->
       <nav class="modal-nav">
-        {#each [{ id: 'storage', icon: 'save', label: $i18n('Storage') }, { id: 'tokens', icon: 'lock', label: $i18n('API Tokens') }, { id: 'webdav', icon: 'webdav', label: 'WebDAV' }, { id: 'language', icon: 'globe', label: $i18n('Language') }, { id: 'browser', icon: 'folder', label: $i18n('File browser') }, { id: 'password', icon: 'lock', label: $i18n('Security') }] as s}
+        {#each [{ id: 'storage', icon: 'save', label: $i18n('Storage') }, { id: 'devices', icon: 'webdav', label: 'Devices / Agents' }, { id: 'tokens', icon: 'lock', label: $i18n('API Tokens') }, { id: 'webdav', icon: 'webdav', label: 'WebDAV' }, { id: 'language', icon: 'globe', label: $i18n('Language') }, { id: 'browser', icon: 'folder', label: $i18n('File browser') }, { id: 'password', icon: 'lock', label: $i18n('Security') }] as s}
           <button
             class="nav-item"
             class:active={activeSection === s.id}
@@ -214,6 +301,133 @@
               </div>
               <p class="quota-label">{usedPct}{$i18n('% used')}</p>
             {/if}
+          {/if}
+
+          <!-- Devices & Remote Agents -->
+        {:else if activeSection === 'devices'}
+          <div class="section-head">
+            <h3>Remote Devices (Agents)</h3>
+            <p class="section-sub">
+              Install the Fileship Agent on your other PCs, NAS or servers to
+              browse, stream and manage their files directly from here.
+            </p>
+          </div>
+
+          {#if createdAgent}
+            <div class="token-reveal">
+              <Icon name="check" size={14} />
+              <span
+                >Run this command on <strong>{createdAgent.name}</strong> to connect:</span
+              >
+              <div class="token-val">
+                <code
+                  >fileship --agent --server {location.origin} --token {createdAgent.token}
+                  --root "{createdAgent.root_path || './data'}"</code
+                >
+                <button
+                  onclick={() => {
+                    navigator.clipboard.writeText(
+                      `fileship --agent --server ${location.origin} --token ${createdAgent.token} --root "${createdAgent.root_path || './data'}"`
+                    )
+                    success($i18n('Copied!'))
+                  }}
+                >
+                  <Icon name="clipboard" size={13} />
+                </button>
+              </div>
+              <button class="link-btn" onclick={() => (createdAgent = null)}
+                >{$i18n('Dismiss')}</button
+              >
+            </div>
+          {/if}
+
+          <div class="token-create">
+            <input
+              placeholder="Device name (e.g. Home-NAS, Gaming-PC)"
+              bind:value={newAgentName}
+            />
+            <input
+              placeholder="Remote folder path (e.g. ./data or C:\Shares)"
+              bind:value={newAgentRoot}
+            />
+            <button class="btn-primary" onclick={createAgentDevice}>
+              <Icon name="plus" size={13} /> Add Device
+            </button>
+          </div>
+
+          {#if $agents.length === 0}
+            <p class="empty-hint">No remote devices registered yet.</p>
+          {:else}
+            <div class="token-list">
+              {#each $agents as dev (dev.id)}
+                <div class="token-item">
+                  <div class="token-meta">
+                    <span class="token-name">{dev.name}</span>
+                    <code class="token-prefix"
+                      >{dev.online ? '🟢 Online' : '⚪ Offline'}</code
+                    >
+                    {#if dev.os_info}
+                      <span class="text-muted" style="font-size:0.75rem"
+                        >{dev.hostname ? `${dev.hostname} · ` : ''}{dev.os_info} ·
+                        {formatBytes(dev.disk_usage, $locale)}</span
+                      >
+                    {/if}
+                  </div>
+                  <div class="token-dates">
+                    <button
+                      class="btn-primary"
+                      disabled={!dev.online}
+                      onclick={async () => {
+                        selectRemoteAgent(dev.id)
+                        await loadFiles('')
+                        onClose()
+                      }}
+                    >
+                      {$activeAgentId === dev.id ? 'Active' : 'Open Device'}
+                    </button>
+                  </div>
+                  <button
+                    class="revoke-btn"
+                    onclick={() => removeAgentDevice(dev.id)}
+                    title="Remove device"
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="section-head" style="margin-top:1.25rem">
+            <h3>Local Sources</h3>
+            <p class="section-sub">
+              Additional folders on this server you can switch between.
+            </p>
+          </div>
+          <div class="token-create">
+            <input placeholder="Source name" bind:value={newSourceName} />
+            <input placeholder="Folder path" bind:value={newSourceRoot} />
+            <button class="btn-primary" onclick={createLocalSource}>
+              <Icon name="plus" size={13} /> Add Source
+            </button>
+          </div>
+          {#if $sources.length > 0}
+            <div class="token-list">
+              {#each $sources as src (src.id)}
+                <div class="token-item">
+                  <div class="token-meta">
+                    <span class="token-name">{src.name}</span>
+                    <code class="token-prefix">{src.root_path}</code>
+                  </div>
+                  <button
+                    class="revoke-btn"
+                    onclick={() => removeLocalSource(src.id)}
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              {/each}
+            </div>
           {/if}
 
           <!-- API Tokens -->

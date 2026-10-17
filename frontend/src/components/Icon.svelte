@@ -72,7 +72,10 @@
     lock: 'M5 11h14v10H5z M8 11V7a4 4 0 018 0v4',
     refresh:
       'M20 11a8 8 0 00-14.9-4 M5 3v4h4 M4 13a8 8 0 0014.9 4 M19 21v-4h-4',
-    activity: 'M3 12h4l3-8 4 16 3-8h4'
+    activity: 'M3 12h4l3-8 4 16 3-8h4',
+    volume:
+      'M11 5L6 9H2v6h4l5 4V5z M19.07 4.93a10 10 0 010 14.14 M15.54 8.46a5 5 0 010 7.07',
+    volume_off: 'M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6'
   }
 </script>
 

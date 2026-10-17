@@ -3,11 +3,20 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { loadFiles, currentPath } from '../stores/files.js'
-  import { accessToken, refreshTokens } from '../stores/auth.js'
+  import {
+    accessToken,
+    refreshTokens,
+    activeSourceId,
+    activeAgentId,
+    apiFetch
+  } from '../stores/auth.js'
   import { csrfHeaders, ensureCSRFToken } from '../lib/csrf.js'
   import { success, error } from '../stores/toast.js'
   import { formatBytes } from '../lib/files.js'
   import Icon from './Icon.svelte'
+
+  const CHUNK_SIZE = 8 * 1024 * 1024
+  const CHUNK_THRESHOLD = 16 * 1024 * 1024
 
   let dragging = false,
     uploads = [],
@@ -27,7 +36,62 @@
     requests.forEach((xhr) => xhr.abort())
   })
 
+  function makeUploadId(file, path) {
+    const raw = `${path}_${file.name}_${file.size}_${file.lastModified || 0}`
+    let hash = 0
+    for (let i = 0; i < raw.length; i++) {
+      hash = (hash * 31 + raw.charCodeAt(i)) >>> 0
+    }
+    return `up_${file.size}_${hash.toString(16)}`
+  }
+
+  async function sendChunked(entry, path) {
+    const relName = entry.file.webkitRelativePath || entry.name
+    const uploadId = makeUploadId(entry.file, path)
+    let offset = 0
+    try {
+      const statusRes = await apiFetch(
+        `/api/files/upload/chunk?upload_id=${encodeURIComponent(uploadId)}`
+      )
+      if (statusRes.ok) {
+        const info = await statusRes.json()
+        if (info.received_bytes > 0 && info.received_bytes < entry.file.size) {
+          offset = info.received_bytes
+        }
+      }
+    } catch {}
+
+    while (offset < entry.file.size && active) {
+      const end = Math.min(offset + CHUNK_SIZE, entry.file.size)
+      const slice = entry.file.slice(offset, end)
+      const isFinal = end >= entry.file.size ? '1' : '0'
+      const params = new URLSearchParams({
+        upload_id: uploadId,
+        path,
+        filename: relName,
+        offset: String(offset),
+        total_size: String(entry.file.size),
+        done: isFinal
+      })
+      const res = await apiFetch(`/api/files/upload/chunk?${params}`, {
+        method: 'POST',
+        body: slice
+      })
+      if (!res.ok) {
+        const msg = (await res.text()).trim().slice(0, 160)
+        return { status: res.status, message: msg }
+      }
+      offset = end
+      entry.progress = Math.round((offset / entry.file.size) * 100)
+      uploads = [...uploads]
+    }
+    return { status: 201, message: '' }
+  }
+
   function send(entry, path) {
+    if (!get(activeAgentId) && entry.file.size > CHUNK_THRESHOLD) {
+      return sendChunked(entry, path)
+    }
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest(),
         form = new FormData()
@@ -70,6 +134,10 @@
       xhr.timeout = 30 * 60 * 1000
       xhr.setRequestHeader('Authorization', `Bearer ${get(accessToken)}`)
       xhr.setRequestHeader('X-CSRF-Token', csrfHeaders()['X-CSRF-Token'])
+      const agtId = get(activeAgentId)
+      const srcId = get(activeSourceId)
+      if (agtId) xhr.setRequestHeader('X-Agent-ID', String(agtId))
+      else if (srcId) xhr.setRequestHeader('X-Source-ID', String(srcId))
       xhr.send(form)
     })
   }
@@ -121,8 +189,7 @@
     await upload(list)
   }
   function handleDrop(event) {
-    if (!Array.from(event.dataTransfer?.types || []).includes($i18n('Files')))
-      return
+    if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return
     event.preventDefault()
     dragging = false
     upload(event.dataTransfer.files)
@@ -139,7 +206,7 @@
   role="region"
   aria-label={$i18n('Upload area')}
   ondragover={(e) => {
-    if (Array.from(e.dataTransfer?.types || []).includes($i18n('Files'))) {
+    if (Array.from(e.dataTransfer?.types || []).includes('Files')) {
       e.preventDefault()
       dragging = true
     }

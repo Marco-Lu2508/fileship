@@ -93,10 +93,26 @@ type TrashItem struct {
 
 // UserSource ist eine benannte Dateiquelle für einen User
 type UserSource struct {
-	ID          int64  `json:"id"`
-	UserID      int64  `json:"user_id"`
-	Name        string `json:"name"`
-	RootPath    string `json:"root_path"`
-	IsDefault   bool   `json:"is_default"`
-	SortOrder   int    `json:"sort_order"`
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"user_id"`
+	Name      string `json:"name"`
+	RootPath  string `json:"root_path"`
+	IsDefault bool   `json:"is_default"`
+	SortOrder int    `json:"sort_order"`
+}
+
+// AgentDevice repräsentiert einen entfernten Fileship-Agenten auf einem anderen Gerät
+type AgentDevice struct {
+	ID         int64      `json:"id"`
+	UserID     int64      `json:"user_id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	RootPath   string     `json:"root_path"`
+	Hostname   string     `json:"hostname"`
+	OSInfo     string     `json:"os_info"`
+	DiskUsage  int64      `json:"disk_usage"`
+	Online     bool       `json:"online"`
+	LastSeen   *time.Time `json:"last_seen,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	PlainToken string     `json:"token,omitempty"`
 }

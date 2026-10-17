@@ -38,7 +38,8 @@ func (h *Hub) upgrader() websocket.Upgrader {
 }
 
 func (h *Hub) Handle(w http.ResponseWriter, r *http.Request) {
-	if _, err := auth.ParseAccessToken(h.secret, r.URL.Query().Get("token")); err != nil {
+	claims, err := auth.ParseAccessToken(h.secret, r.URL.Query().Get("token"))
+	if err != nil || claims.TwoFAPending {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -70,9 +71,12 @@ func (h *Hub) Broadcast(event model.WSEvent) {
 	if err != nil {
 		return
 	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for conn := range h.clients {
-		conn.WriteMessage(websocket.TextMessage, data)
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			conn.Close()
+			delete(h.clients, conn)
+		}
 	}
 }

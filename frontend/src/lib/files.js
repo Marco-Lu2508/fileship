@@ -14,14 +14,23 @@ export function formatBytes(bytes = 0, language = get(locale)) {
 export function fileKind(file) {
   if (file.is_dir) return 'folder'
   const mime = file.mime_type || ''
-  if (mime.startsWith('image/')) return 'image'
-  if (mime.startsWith('video/')) return 'video'
-  if (mime.startsWith('audio/')) return 'audio'
-  if (/\.(zip|gz|tar|7z|rar)$/i.test(file.name)) return 'archive'
+  const name = file.name || ''
+  if (
+    mime.startsWith('image/') ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)
+  )
+    return 'image'
+  if (mime.startsWith('video/') || /\.(mp4|webm|ogv|mov|m4v)$/i.test(name))
+    return 'video'
+  if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|oga|m4a|flac)$/i.test(name))
+    return 'audio'
+  if (/\.(zip|gz|tar|7z|rar)$/i.test(name)) return 'archive'
   if (
     mime.includes('pdf') ||
     mime.startsWith('text/') ||
-    /\.(md|txt|docx?|xlsx?|pptx?|json|csv)$/i.test(file.name)
+    /\.(pdf|md|txt|docx?|xlsx?|pptx?|json|yaml|yml|csv|log|xml|html|css|js|ts|go|py|sh)$/i.test(
+      name
+    )
   )
     return 'text'
   return 'file'

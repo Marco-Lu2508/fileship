@@ -12,6 +12,12 @@ import (
 )
 
 func ListPaged(root string, opts model.ListOptions) (model.ListResult, error) {
+	return ListPagedFiltered(root, opts, nil)
+}
+
+// Filter before sorting and pagination so totals and page boundaries describe
+// only the files the caller is allowed to see.
+func ListPagedFiltered(root string, opts model.ListOptions, allow func(model.FileInfo) bool) (model.ListResult, error) {
 	abs, err := Resolve(root, opts.Path)
 	if err != nil {
 		return model.ListResult{}, err
@@ -43,6 +49,9 @@ func ListPaged(root string, opts model.ListOptions) (model.ListResult, error) {
 		if !e.IsDir() {
 			fi.MimeType = mimeType(e.Name())
 		}
+		if allow != nil && !allow(fi) {
+			continue
+		}
 		files = append(files, fi)
 	}
 
@@ -60,13 +69,14 @@ func ListPaged(root string, opts model.ListOptions) (model.ListResult, error) {
 	if page <= 0 {
 		page = 1
 	}
-	start := (page - 1) * perPage
-	if start >= total {
+	// Compare page counts before multiplying untrusted query parameters.
+	if total == 0 || page > (total-1)/perPage+1 {
 		files = []model.FileInfo{}
 	} else {
-		end := start + perPage
-		if end > total {
-			end = total
+		start := (page - 1) * perPage
+		end := total
+		if perPage < total-start {
+			end = start + perPage
 		}
 		files = files[start:end]
 	}
@@ -136,23 +146,15 @@ func Search(root, query string) ([]model.FileInfo, error) {
 	return results, err
 }
 
-// virtualFSPaths sind Linux-Pseudo-Dateisysteme die nicht gewandert werden sollen
-var virtualFSPaths = map[string]bool{
-	"proc": true, "sys": true, "dev": true, "run": true,
-	"tmp": true, "snap": true,
-}
-
 func DirSize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // Fehler ignorieren, weitermachen
+			return err
 		}
-		// Virtuelle Dateisysteme überspringen
-		if info.IsDir() && virtualFSPaths[info.Name()] {
-			return filepath.SkipDir
-		}
-		if !info.IsDir() {
+		// User folders named tmp, dev or run are ordinary workspace content.
+		// Symlinks and device files do not contribute file contents to usage.
+		if info.Mode().IsRegular() {
 			size += info.Size()
 		}
 		return nil

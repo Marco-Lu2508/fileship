@@ -38,7 +38,17 @@
   import Help from './Help.svelte'
   import DownloadDialog from './DownloadDialog.svelte'
   import { preferences } from '../stores/preferences.js'
-  import { transferFiles } from '../lib/operations.js'
+  import { topLevelPaths, transferFiles } from '../lib/operations.js'
+  import {
+    sources,
+    agents,
+    activeSourceId,
+    activeAgentId,
+    loadSources,
+    loadAgents,
+    selectLocalWorkspace,
+    selectRemoteAgent
+  } from '../stores/sources.js'
 
   let transfer = null,
     clipboard = null,
@@ -99,7 +109,10 @@
   async function transferred(results) {
     const done = results.filter((r) => r.ok).map((r) => r.path)
     if (clipboard?.mode === 'move') {
-      clipboard.paths = clipboard.paths.filter((path) => !done.includes(path))
+      clipboard.paths = clipboard.paths.filter(
+        (path) =>
+          !done.some((moved) => path === moved || path.startsWith(moved + '/'))
+      )
       if (!clipboard.paths.length) clipboard = null
     }
     if (done.length) {
@@ -144,37 +157,56 @@
     ? localStorage.getItem('fileship_view')
     : 'list'
   let viewportWidth = window.innerWidth
+  let navigationId = 0
 
   onMount(() => {
+    let previousListing = get(files)
+    const stopListing = files.subscribe((listing) => {
+      if (listing === previousListing) return
+      previousListing = listing
+      if (searchQuery.trim()) onSearch(false)
+    })
     loadFiles('', { page: 1, sort_by: sortKey, sort_asc: sortAsc })
     loadFavorites().catch(() => error($i18n('Could not load favorites')))
-    connectWS(loadStorage)
+    loadSources()
+    loadAgents()
+    connectWS(() => {
+      loadStorage()
+      loadAgents()
+    })
     loadStorage()
     return () => {
       disconnectWS()
+      stopListing()
       clearTimeout(searchTimeout)
       clearTimeout(reindexTimeout)
       searchController?.abort()
     }
   })
 
-  function clearSearch() {
+  function clearSearch(refresh = true) {
+    const wasSearching = !!searchQuery.trim()
     clearTimeout(searchTimeout)
     searchController?.abort()
     searchQuery = ''
     searchResults = null
     searchLoading = false
     searchError = ''
+    if (wasSearching) selected.set(new Set())
+    if (refresh && wasSearching)
+      loadFiles(get(currentPath), { sort_by: sortKey, sort_asc: sortAsc })
   }
   async function navigateTo(path) {
+    const id = ++navigationId
     if (tableWrap) saveScrollPosition(get(currentPath), tableWrap.scrollTop)
-    clearSearch()
+    clearSearch(false)
     showMenu = false
     mobileNav = false
     filter = 'all'
-    await loadFiles(path, { page: 1 })
+    await loadFiles(path, { page: 1, sort_by: sortKey, sort_asc: sortAsc })
     await tick()
-    if (tableWrap) tableWrap.scrollTop = getScrollPosition(path)
+    if (id === navigationId && tableWrap)
+      tableWrap.scrollTop = getScrollPosition(path)
   }
   function onKeydown(e) {
     if (
@@ -194,7 +226,7 @@
       return
     if (e.key === 'Escape') {
       if (createKind) {
-        createKind = ''
+        if (!creating) createKind = ''
         return
       }
       clearSearch()
@@ -243,7 +275,8 @@
       }
       if (e.key.toLowerCase() === 'a') {
         e.preventDefault()
-        selected.set(new Set(sorted.map((f) => f.path)))
+        if (!$loading && !searchLoading)
+          selected.set(new Set(sorted.map((f) => f.path)))
       }
       if (['k', 'f'].includes(e.key.toLowerCase())) {
         e.preventDefault()
@@ -252,9 +285,10 @@
       return
     }
     if (e.key === 'Delete') requestDelete([...get(selected)])
-    if (e.key === 'r') loadFiles(get(currentPath))
+    if (e.key === 'r') refreshView()
   }
   async function openCreate(kind) {
+    if (creating) return
     createKind = kind
     createName = ''
     showMenu = false
@@ -294,11 +328,12 @@
   }
   function requestDelete(paths) {
     if (paths.length) {
-      deletePaths = paths
+      deletePaths = topLevelPaths(paths)
       showMenu = false
     }
   }
   async function confirmDelete() {
+    if (deleting) return
     deleting = true
     const results = await Promise.allSettled(
       deletePaths.map((path) => deleteFile(path))
@@ -319,6 +354,7 @@
     await loadFiles(get(currentPath))
     selected.set(new Set(failed))
     await loadFavorites().catch(() => {})
+    loadStorage()
   }
   async function triggerReindex() {
     indexing = true
@@ -378,7 +414,16 @@
   function setSort(key, ascending = sortKey === key ? !sortAsc : true) {
     sortKey = key
     sortAsc = ascending
-    loadFiles(get(currentPath), { page: 1, sort_by: key, sort_asc: ascending })
+    if (!isSearching)
+      loadFiles(get(currentPath), {
+        page: 1,
+        sort_by: key,
+        sort_asc: ascending
+      })
+  }
+  function refreshView() {
+    if (isSearching) onSearch(false)
+    else loadFiles(get(currentPath))
   }
   function setView(mode) {
     viewMode = mode
@@ -389,15 +434,18 @@
     selected.set(new Set())
     mobileNav = false
   }
-  function onSearch() {
+  function onSearch(clearSelection = true) {
     clearTimeout(searchTimeout)
     searchController?.abort()
     searchResults = null
     searchError = ''
-    selected.set(new Set())
+    if (clearSelection) selected.set(new Set())
     const query = searchQuery.trim()
     searchLoading = !!query
-    if (!query) return
+    if (!query) {
+      loadFiles(get(currentPath), { sort_by: sortKey, sort_asc: sortAsc })
+      return
+    }
     const controller = new AbortController()
     searchController = controller
     searchTimeout = setTimeout(async () => {
@@ -409,7 +457,13 @@
           $i18n('Search failed')
         )
         const results = await response.json()
-        if (!controller.signal.aborted) searchResults = results || []
+        if (!controller.signal.aborted) {
+          searchResults = results || []
+          const paths = new Set(searchResults.map((file) => file.path))
+          selected.update(
+            (current) => new Set([...current].filter((path) => paths.has(path)))
+          )
+        }
       } catch (err) {
         if (!controller.signal.aborted) searchError = err.message
       } finally {
@@ -427,7 +481,9 @@
   ]
   $: favoritePaths = new Set($favorites.map((f) => f.path))
   $: isSearching = !!searchQuery.trim()
-  $: displayFiles = (searchResults ?? $files.files ?? []).map((file) => ({
+  $: displayFiles = (
+    isSearching ? (searchResults ?? []) : ($files.files ?? [])
+  ).map((file) => ({
     ...file,
     starred: favoritePaths.has(file.path)
   }))
@@ -461,7 +517,7 @@
     : $currentPath
       ? $currentPath.split('/').pop()
       : $i18n('Your files')
-  $: visibleError = searchError || $loadError
+  $: visibleError = isSearching ? searchError : $loadError
 </script>
 
 <svelte:window
@@ -568,6 +624,49 @@
         >{:else}<p class="favorites-hint">
           {$i18n('Star a file or folder to keep it close.')}
         </p>{/each}
+      {#if $agents.length > 0 || $sources.length > 0}
+        <span class="nav-label favorites-label">Devices & Sources</span>
+        <button
+          class="nav-item favorite-link"
+          class:active={!$activeAgentId && !$activeSourceId}
+          onclick={() => {
+            selectLocalWorkspace(null)
+            navigateTo('')
+          }}
+        >
+          <Icon name="save" size={16} /><span>Local Server</span>
+        </button>
+        {#each $sources as src (src.id)}
+          <button
+            class="nav-item favorite-link"
+            class:active={!$activeAgentId && $activeSourceId === src.id}
+            onclick={() => {
+              selectLocalWorkspace(src.id)
+              navigateTo('')
+            }}
+          >
+            <Icon name="folder" size={16} /><span>{src.name}</span>
+          </button>
+        {/each}
+        {#each $agents as dev (dev.id)}
+          <button
+            class="nav-item favorite-link"
+            class:active={$activeAgentId === dev.id}
+            disabled={!dev.online}
+            title={dev.online
+              ? `${dev.hostname || dev.name} (Online)`
+              : `${dev.name} (Offline)`}
+            onclick={() => {
+              selectRemoteAgent(dev.id)
+              navigateTo('')
+            }}
+          >
+            <Icon name="webdav" size={16} /><span
+              >{dev.online ? '🟢' : '⚪'} {dev.name}</span
+            >
+          </button>
+        {/each}
+      {/if}
     </nav>
     <div class="sidebar-bottom">
       {#if storage}<div class="storage-summary">
@@ -707,9 +806,8 @@
               class="icon-btn"
               aria-label={$i18n('Refresh folder')}
               title={$i18n('Refresh folder')}
-              disabled={$loading}
-              onclick={() => loadFiles($currentPath)}
-              ><Icon name="refresh" size={17} /></button
+              disabled={isSearching ? searchLoading : $loading}
+              onclick={refreshView}><Icon name="refresh" size={17} /></button
             >
             <div class="view-toggle">
               <button
@@ -817,7 +915,9 @@
           </div>
         </div>
         {#if selCount}<div class="selection-bar" role="status">
-            <span>{$i18n('{count} selected', { count: selCount })}</span>
+            <span class="selection-count-badge"
+              >{$i18n('{count} selected', { count: selCount })}</span
+            >
             <button onclick={() => startTransfer('copy')}
               ><Icon name="copy" size={16} />{$i18n('Copy')}</button
             >
@@ -848,6 +948,7 @@
             /><input
               id="create-name"
               bind:value={createName}
+              disabled={creating}
               placeholder={createKind === 'folder'
                 ? $i18n('Name your folder')
                 : $i18n('Name your file')}
@@ -861,6 +962,7 @@
               type="button"
               class="icon-btn"
               aria-label={$i18n('Cancel create')}
+              disabled={creating}
               onclick={() => (createKind = '')}
               ><Icon name="x" size={18} /></button
             >
@@ -869,9 +971,9 @@
           class="file-wrap"
           class:grid-view={viewMode !== 'list'}
           bind:this={tableWrap}
-          aria-busy={$loading || searchLoading}
+          aria-busy={isSearching ? searchLoading : $loading}
         >
-          {#if $loading || searchLoading}<Skeleton rows={8} />
+          {#if isSearching ? searchLoading : $loading}<Skeleton rows={8} />
           {:else if visibleError}<div class="empty-state" role="alert">
               <span class="empty-icon"><Icon name="warning" size={30} /></span>
               <h2>{$i18n('Something didn’t load')}</h2>
@@ -1129,9 +1231,6 @@
     }
   }
   .heading-actions {
-    flex-wrap: wrap;
-  }
-  .selection-bar {
     flex-wrap: wrap;
   }
   .storage-summary {
@@ -1613,33 +1712,85 @@
     background: var(--row-hover);
   }
   .selection-bar {
-    flex-wrap: wrap;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
     display: flex;
     align-items: center;
-    gap: 19px;
-    background: var(--accent-soft);
+    gap: 10px;
+    background: var(--surface);
+    backdrop-filter: blur(16px);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 15px;
-    margin-bottom: 12px;
+    border-radius: 9999px;
+    padding: 8px 16px;
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.28),
+      0 2px 8px rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+    color: var(--text);
+    animation: slideUpFloat 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUpFloat {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 16px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+  .selection-count-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--accent);
+    color: var(--on-accent, #fff);
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-weight: 600;
     font-size: 12px;
-    color: var(--accent);
+    white-space: nowrap;
   }
   .selection-bar button {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 7px;
-    background: none;
-    border: 0;
-    color: var(--accent);
+    gap: 6px;
+    background: var(--bg2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    color: var(--text);
     cursor: pointer;
     font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    transition:
+      background 0.15s,
+      transform 0.1s;
+    white-space: nowrap;
+  }
+  .selection-bar button:hover {
+    background: var(--row-hover);
+    transform: translateY(-1px);
   }
   .selection-bar .danger {
     color: var(--danger);
   }
+  .selection-bar .danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+  }
   .clear-selection {
-    margin-left: auto;
+    margin-left: 4px;
+    padding: 6px !important;
+    border-radius: 50% !important;
+    color: var(--text2) !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .selection-bar {
+      animation: none;
+      transition: none;
+    }
   }
   .create-bar {
     display: flex;
@@ -1970,9 +2121,14 @@
       width: 34px;
     }
     .selection-bar {
-      gap: 12px;
-      padding: 10px;
-      flex-wrap: wrap;
+      bottom: 12px;
+      width: calc(100vw - 24px);
+      left: 12px;
+      transform: none;
+      border-radius: 12px;
+      overflow-x: auto;
+      gap: 6px;
+      padding: 6px 10px;
     }
     .filter-tabs {
       gap: 16px;

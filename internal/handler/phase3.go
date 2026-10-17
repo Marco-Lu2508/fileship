@@ -100,7 +100,7 @@ func (h *Handler) trashDeletePermanent(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	claims, _ := h.claimsUser(r)
+	claims, username := h.claimsUser(r)
 	item, err := h.db.TrashGet(claims.UserID, name)
 	if err != nil || item == nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -110,9 +110,23 @@ func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 	trashPath := filepath.Join(h.trashDir(), item.TrashName)
 	root := h.userRoot(r)
 
-	restorePath, resolveErr := fsvc.Resolve(root, item.OrigPath)
+	restoreRel, cleanErr := fsvc.CleanRelativePath(item.OrigPath)
+	if cleanErr != nil || restoreRel == "" {
+		restoreRel, cleanErr = fsvc.CleanRelativePath(item.Name)
+		if cleanErr != nil || restoreRel == "" {
+			http.Error(w, "invalid restore path", http.StatusBadRequest)
+			return
+		}
+	}
+
+	restorePath, resolveErr := fsvc.Resolve(root, restoreRel)
 	if resolveErr != nil {
-		restorePath = filepath.Join(root, item.Name)
+		restoreRel = filepath.Base(item.Name)
+		restorePath, resolveErr = fsvc.Resolve(root, restoreRel)
+		if resolveErr != nil {
+			http.Error(w, "invalid restore path", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Konflikt: Suffix anfügen
@@ -120,6 +134,52 @@ func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 		ext := filepath.Ext(restorePath)
 		base := strings.TrimSuffix(restorePath, ext)
 		restorePath = fmt.Sprintf("%s_restored_%d%s", base, time.Now().Unix(), ext)
+		if rel, relErr := filepath.Rel(root, restorePath); relErr == nil {
+			restoreRel = filepath.ToSlash(rel)
+		}
+	}
+
+	quota, allowedTypes, err := h.db.GetUserQuotaAndTypes(claims.UserID)
+	if err != nil {
+		http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+		return
+	}
+	if !claims.IsAdmin {
+		perms, permErr := h.db.ListPathPermissions(claims.UserID)
+		if permErr != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+		for cur := restoreRel; ; {
+			if !db.PathPermissionAllowed(perms, cur, "write") {
+				http.Error(w, "permission denied for path: "+cur, http.StatusForbidden)
+				return
+			}
+			if cur == "" {
+				break
+			}
+			parent := filepath.ToSlash(filepath.Dir(cur))
+			if parent == "." || parent == cur {
+				cur = ""
+			} else {
+				cur = parent
+			}
+		}
+	}
+	if !item.IsDir && allowedTypes != "" && !fsvc.TypeAllowed(filepath.Base(restorePath), allowedTypes) {
+		http.Error(w, "file type not allowed", http.StatusForbidden)
+		return
+	}
+	if quota > 0 {
+		used, sizeErr := fsvc.DirSize(root)
+		if sizeErr != nil {
+			http.Error(w, "cannot calculate storage usage", http.StatusInternalServerError)
+			return
+		}
+		if used > quota || item.Size > quota-used {
+			http.Error(w, "storage quota exceeded", http.StatusForbidden)
+			return
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(restorePath), 0755); err != nil {
@@ -133,7 +193,12 @@ func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.db.TrashDelete(claims.UserID, name)
-	h.hub.Broadcast(model.WSEvent{Type: "restore", Path: item.OrigPath})
+	h.db.DirSizeCacheSet(root, 0)
+	if h.indexer != nil {
+		h.indexer.TriggerReindex(claims.UserID, root)
+	}
+	h.db.LogAction(claims.UserID, username, "restore", restoreRel, r.RemoteAddr)
+	h.hub.Broadcast(model.WSEvent{Type: "restore", Path: restoreRel})
 	w.WriteHeader(http.StatusNoContent)
 }
 

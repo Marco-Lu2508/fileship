@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yourname/fileship/internal/agent"
 	"github.com/yourname/fileship/internal/auth"
 	"github.com/yourname/fileship/internal/config"
 	"github.com/yourname/fileship/internal/db"
@@ -20,15 +22,17 @@ import (
 )
 
 type Handler struct {
-	cfg     *config.Config
-	db      *db.DB
-	hub     *ws.Hub
-	indexer *db.Indexer
+	cfg      *config.Config
+	db       *db.DB
+	hub      *ws.Hub
+	indexer  *db.Indexer
+	agentHub *agent.Hub
 }
 
 func New(cfg *config.Config, database *db.DB, hub *ws.Hub) *Handler {
 	ix := db.NewIndexer(database)
-	return &Handler{cfg: cfg, db: database, hub: hub, indexer: ix}
+	ah := agent.NewHub(database.UpdateAgentHeartbeat)
+	return &Handler{cfg: cfg, db: database, hub: hub, indexer: ix, agentHub: ah}
 }
 
 func (h *Handler) Routes() http.Handler {
@@ -43,17 +47,22 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/api/auth/logout", h.logout)
 	r.Post("/api/auth/2fa/verify", h.twoFAVerify) // Pending-Token → vollständiges Token
 	r.Get("/s/{token}", h.PublicShare)
+	r.Post("/s/{token}/upload", h.PublicShareUpload)
 	r.Get("/ws", h.hub.Handle)
+	r.Get("/api/agent/ws", h.agentWS)
 
 	// Auth-Middleware mit API-Token-Support
 	authMW := middleware.AuthWithAPIToken(h.cfg.JWTSecret, h.db.ValidateAPIToken)
 
 	r.Group(func(r chi.Router) {
 		r.Use(authMW)
+		r.Use(h.agentRouteMiddleware)
 
 		r.Get("/api/files", h.listFiles)
 		r.Get("/api/files/info", h.fileInfo)
 		r.Post("/api/files/upload", h.uploadFile)
+		r.Get("/api/files/upload/chunk", h.uploadChunkStatus)
+		r.Post("/api/files/upload/chunk", h.uploadChunk)
 		r.Delete("/api/files", h.deleteFile)
 		r.Post("/api/files/mkdir", h.mkdir)
 		r.Post("/api/files/touch", h.touch)
@@ -91,7 +100,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/api/shares", h.createShare)
 		r.Delete("/api/shares/{token}", h.deleteShare)
 
-		// Phase 3: Trash, Sources, 2FA
+		// Phase 3: Trash, Sources, Agents, 2FA
 		r.Get("/api/trash", h.trashList)
 		r.Delete("/api/trash/{name}", h.trashDeletePermanent)
 		r.Post("/api/trash/{name}/restore", h.trashRestore)
@@ -100,6 +109,9 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/api/me/sources", h.createSource)
 		r.Put("/api/me/sources/{id}", h.updateSource)
 		r.Delete("/api/me/sources/{id}", h.deleteSource)
+		r.Get("/api/me/agents", h.listAgents)
+		r.Post("/api/me/agents", h.createAgent)
+		r.Delete("/api/me/agents/{id}", h.deleteAgent)
 		r.Post("/api/me/2fa/setup", h.twoFASetup)
 		r.Post("/api/me/2fa/enable", h.twoFAEnable)
 		r.Delete("/api/me/2fa", h.twoFADisable)
@@ -267,7 +279,25 @@ func (h *Handler) userRoot(r *http.Request) string {
 	if err != nil {
 		return h.cfg.RootPath
 	}
-	return h.resolveRoot(user.RootPath)
+	baseRoot := h.resolveRoot(user.RootPath)
+
+	rawSrcID := r.Header.Get("X-Source-ID")
+	if rawSrcID == "" {
+		rawSrcID = r.URL.Query().Get("source_id")
+	}
+	if rawSrcID != "" {
+		if srcID, err := strconv.ParseInt(rawSrcID, 10, 64); err == nil && srcID > 0 {
+			if src := h.db.GetSourceByID(claims.UserID, srcID); src != nil {
+				if user.IsAdmin && filepath.IsAbs(src.RootPath) {
+					return filepath.Clean(src.RootPath)
+				}
+				if resolved, err := fsvc.Resolve(baseRoot, src.RootPath); err == nil {
+					return resolved
+				}
+			}
+		}
+	}
+	return baseRoot
 }
 
 // claimsUser gibt Claims + Username zurück
@@ -282,6 +312,21 @@ func (h *Handler) claimsUser(r *http.Request) (*auth.Claims, string) {
 
 func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	if !h.checkPerm(w, r, q.Get("path"), "read") {
+		return
+	}
+	claims, _ := h.claimsUser(r)
+	var allow func(model.FileInfo) bool
+	if !claims.IsAdmin {
+		permissions, err := h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+		allow = func(file model.FileInfo) bool {
+			return db.PathPermissionAllowed(permissions, file.Path, "read")
+		}
+	}
 	page, _ := strconv.Atoi(q.Get("page"))
 	perPage, _ := strconv.Atoi(q.Get("per_page"))
 	sortAsc := q.Get("sort_asc") != "false"
@@ -294,14 +339,13 @@ func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 		Page:    page,
 		PerPage: perPage,
 	}
-	result, err := fsvc.ListPaged(h.userRoot(r), opts)
+	result, err := fsvc.ListPagedFiltered(h.userRoot(r), opts, allow)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Ordnergröße für Unterordner einfügen (gecacht, non-blocking)
-	claims, _ := h.claimsUser(r)
 	root := h.userRoot(r)
 
 	// Favoriten-Set für diesen User laden
@@ -355,35 +399,39 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := h.userRoot(r)
-	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	claims, username := h.claimsUser(r)
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 || len(files) > 100 {
 		http.Error(w, "too many files (max 100)", http.StatusBadRequest)
 		return
 	}
 
-	// Quota + Typ-Check
-	quota, allowedTypes, _ := h.db.GetUserQuotaAndTypes(claims.UserID)
-	if quota > 0 {
-		usage, _ := fsvc.DirSize(root)
-		incoming := int64(0)
-		for _, fh := range files {
-			incoming += fh.Size
-		}
-		if usage > quota || incoming > quota-usage {
-			http.Error(w, "storage quota exceeded", http.StatusForbidden)
-			return
-		}
-	}
-
-	claims, username := h.claimsUser(r)
 	// Multipart parsers strip directories from filenames; carry folder paths explicitly.
 	relativePath := r.FormValue("relative_path")
 	if relativePath != "" && len(files) != 1 {
 		http.Error(w, "relative_path requires one file", http.StatusBadRequest)
 		return
 	}
-	for _, fh := range files {
+
+	quota, allowedTypes, err := h.db.GetUserQuotaAndTypes(claims.UserID)
+	if err != nil {
+		http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+		return
+	}
+	var perms []model.PathPermission
+	if !claims.IsAdmin {
+		perms, err = h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Preflight all files before writing any entry so a rejected batch item
+	// never leaves partial uploads behind.
+	targetRels := make([]string, len(files))
+	var incoming int64
+	for i, fh := range files {
 		name := fh.Filename
 		if relativePath != "" {
 			name = relativePath
@@ -393,25 +441,57 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid upload path", http.StatusBadRequest)
 			return
 		}
-		if !h.checkPerm(w, r, filepath.ToSlash(filepath.Join(dir, safeName)), "write") {
+		rel := filepath.ToSlash(filepath.Join(dir, safeName))
+		abs, err := fsvc.Resolve(root, rel)
+		if err != nil {
+			http.Error(w, "invalid upload path", http.StatusBadRequest)
 			return
+		}
+		if !claims.IsAdmin {
+			for p := rel; p != "." && p != ""; p = filepath.ToSlash(filepath.Dir(p)) {
+				if !db.PathPermissionAllowed(perms, p, "write") {
+					http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
+					return
+				}
+			}
 		}
 		if allowedTypes != "" && !fsvc.TypeAllowed(safeName, allowedTypes) {
 			http.Error(w, "file type not allowed: "+safeName, http.StatusForbidden)
 			return
 		}
+		incoming += fh.Size
+		if info, statErr := os.Stat(abs); statErr == nil && info.Mode().IsRegular() {
+			incoming -= info.Size()
+		}
+		targetRels[i] = rel
+	}
+
+	if quota > 0 {
+		usage, err := fsvc.DirSize(root)
+		if err != nil {
+			http.Error(w, "cannot calculate storage usage", http.StatusInternalServerError)
+			return
+		}
+		if usage > quota || incoming > quota-usage {
+			http.Error(w, "storage quota exceeded", http.StatusForbidden)
+			return
+		}
+	}
+
+	for i, fh := range files {
+		rel := targetRels[i]
 		f, err := fh.Open()
 		if err != nil {
 			http.Error(w, "could not read upload", http.StatusBadRequest)
 			return
 		}
-		if err := fsvc.SaveUpload(root, filepath.Join(dir, safeName), f); err != nil {
+		if err := fsvc.SaveUpload(root, rel, f); err != nil {
 			f.Close()
 			http.Error(w, "could not save file", http.StatusInternalServerError)
 			return
 		}
 		f.Close()
-		h.db.LogAction(claims.UserID, username, "upload", dir+"/"+safeName, r.RemoteAddr)
+		h.db.LogAction(claims.UserID, username, "upload", rel, r.RemoteAddr)
 	}
 	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: dir})
 	// Index aktualisieren
@@ -421,32 +501,69 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
-	if _, err := fsvc.CleanRelativePath(path); err != nil {
+	cleanPath, err := fsvc.CleanRelativePath(path)
+	if err != nil {
 		http.Error(w, "cannot delete workspace root", http.StatusBadRequest)
-		return
-	}
-	if !h.checkPerm(w, r, path, "delete") {
 		return
 	}
 	claims, _ := h.claimsUser(r)
 	root := h.userRoot(r)
+	abs, err := fsvc.Resolve(root, cleanPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !claims.IsAdmin {
+		perms, err := h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+		if !db.PathPermissionAllowed(perms, cleanPath, "delete") {
+			http.Error(w, "permission denied for path: "+cleanPath, http.StatusForbidden)
+			return
+		}
+		if info, statErr := os.Lstat(abs); statErr == nil && info.IsDir() {
+			rootAbs, _ := fsvc.Resolve(root, "")
+			var denied string
+			_ = filepath.Walk(abs, func(current string, _ os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				rel, relErr := filepath.Rel(rootAbs, current)
+				if relErr != nil {
+					return relErr
+				}
+				rel = filepath.ToSlash(rel)
+				if !db.PathPermissionAllowed(perms, rel, "delete") {
+					denied = rel
+					return filepath.SkipAll
+				}
+				return nil
+			})
+			if denied != "" {
+				http.Error(w, "permission denied for path: "+denied, http.StatusForbidden)
+				return
+			}
+		}
+	}
 
 	// Soft-Delete: in Papierkorb verschieben (permanent=true überspringt das)
 	permanent := r.URL.Query().Get("permanent") == "true"
 	if permanent {
-		if err := fsvc.Delete(root, path); err != nil {
+		if err := fsvc.Delete(root, cleanPath); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else {
-		if err := h.SoftDelete(claims.UserID, root, path); err != nil {
+		if err := h.SoftDelete(claims.UserID, root, cleanPath); err != nil {
 			http.Error(w, "could not move to trash: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	h.db.IndexDelete(claims.UserID, path)
-	h.hub.Broadcast(model.WSEvent{Type: "delete", Path: path})
+	h.db.IndexDelete(claims.UserID, cleanPath)
+	h.hub.Broadcast(model.WSEvent{Type: "delete", Path: cleanPath})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -458,14 +575,41 @@ func (h *Handler) touch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if !h.checkPerm(w, r, body.Path, "write") {
+	cleanPath, err := fsvc.CleanRelativePath(body.Path)
+	if err != nil {
+		http.Error(w, "file path required", http.StatusBadRequest)
 		return
 	}
-	if err := fsvc.CreateFile(h.userRoot(r), body.Path); err != nil {
+	claims, _ := h.claimsUser(r)
+	if !claims.IsAdmin {
+		perms, err := h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+		for p := cleanPath; p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
+			if !db.PathPermissionAllowed(perms, p, "write") {
+				http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
+				return
+			}
+		}
+	}
+	_, allowedTypes, err := h.db.GetUserQuotaAndTypes(claims.UserID)
+	if err != nil {
+		http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+		return
+	}
+	if allowedTypes != "" && !fsvc.TypeAllowed(cleanPath, allowedTypes) {
+		http.Error(w, "file type not allowed", http.StatusForbidden)
+		return
+	}
+	root := h.userRoot(r)
+	if err := fsvc.CreateFile(root, cleanPath); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.hub.Broadcast(model.WSEvent{Type: "create", Path: body.Path})
+	h.indexer.TriggerReindex(claims.UserID, root)
+	h.hub.Broadcast(model.WSEvent{Type: "create", Path: cleanPath})
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -477,18 +621,32 @@ func (h *Handler) mkdir(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if _, err := fsvc.CleanRelativePath(body.Path); err != nil {
+	cleanPath, err := fsvc.CleanRelativePath(body.Path)
+	if err != nil {
 		http.Error(w, "folder path required", http.StatusBadRequest)
 		return
 	}
-	if !h.checkPerm(w, r, body.Path, "write") {
-		return
+	claims, _ := h.claimsUser(r)
+	if !claims.IsAdmin {
+		perms, err := h.db.ListPathPermissions(claims.UserID)
+		if err != nil {
+			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
+			return
+		}
+		for p := cleanPath; p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
+			if !db.PathPermissionAllowed(perms, p, "write") {
+				http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
+				return
+			}
+		}
 	}
-	if err := fsvc.Mkdir(h.userRoot(r), body.Path); err != nil {
+	root := h.userRoot(r)
+	if err := fsvc.Mkdir(root, cleanPath); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.hub.Broadcast(model.WSEvent{Type: "mkdir", Path: body.Path})
+	h.indexer.TriggerReindex(claims.UserID, root)
+	h.hub.Broadcast(model.WSEvent{Type: "mkdir", Path: cleanPath})
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -518,7 +676,11 @@ func (h *Handler) renameFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
-	rel := r.URL.Query().Get("path")
+	rel, err := fsvc.CleanRelativePath(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "file path required", http.StatusBadRequest)
+		return
+	}
 	if !h.checkPerm(w, r, rel, "read") {
 		return
 	}
@@ -526,16 +688,31 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	abs, err := fsvc.Resolve(root, rel)
 	if err != nil {
 		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	info, err := os.Stat(abs)
+	if os.IsNotExist(err) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		http.Error(w, "not a regular file", http.StatusBadRequest)
 		return
 	}
 	mime, _ := fsvc.DetectMime(root, rel)
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "attachment")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	http.ServeFile(w, r, abs)
 }
 
 func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
-	rel := r.URL.Query().Get("path")
+	rel, err := fsvc.CleanRelativePath(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "file path required", http.StatusBadRequest)
+		return
+	}
 	if !h.checkPerm(w, r, rel, "read") {
 		return
 	}
@@ -545,9 +722,20 @@ func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	info, err := os.Stat(abs)
+	if os.IsNotExist(err) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		http.Error(w, "not a regular file", http.StatusBadRequest)
+		return
+	}
 	mime, _ := fsvc.DetectMime(root, rel)
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
 	http.ServeFile(w, r, abs)
 }
 

@@ -115,6 +115,19 @@ func (d *DB) IncrementShareDownload(token string) {
 	d.Exec("UPDATE share_links SET download_count = download_count + 1 WHERE token = ?", token)
 }
 
+// ConsumeShareDownload atomically increments download_count if within download_limit.
+func (d *DB) ConsumeShareDownload(token string) bool {
+	res, err := d.Exec(
+		"UPDATE share_links SET download_count = download_count + 1 WHERE token = ? AND (download_limit = 0 OR download_count < download_limit)",
+		token,
+	)
+	if err != nil {
+		return false
+	}
+	rows, err := res.RowsAffected()
+	return err == nil && rows == 1
+}
+
 func (d *DB) ListShareLinks(userID int64) ([]model.ShareLink, error) {
 	rows, err := d.Query(
 		"SELECT token, path, is_dir, created_by, expires_at, created_at, password_hash, download_limit, download_count, allow_upload, allow_edit FROM share_links WHERE created_by = ? ORDER BY created_at DESC",

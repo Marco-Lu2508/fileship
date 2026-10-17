@@ -1,4 +1,5 @@
 <script>
+  import { onDestroy } from 'svelte'
   import Modal from './Modal.svelte'
   import { translator as i18n } from '../stores/i18n.js'
   import { apiFetch } from '../stores/auth.js'
@@ -13,35 +14,50 @@
   let loading = true
   let saving = false
   let loadId = 0
+  let loadController = null
+  let destroyed = false
   let lineNumbers
 
-  $: if (file) loadContent()
+  $: currentPath = file?.path ?? null
+  $: loadContent(currentPath)
 
-  async function loadContent() {
+  async function loadContent(path) {
+    loadController?.abort()
+    loadController = null
     const id = ++loadId
-    const path = file.path
     loading = true
     content = original = ''
+    if (path === null) {
+      loading = false
+      return
+    }
+    const controller = new AbortController()
+    loadController = controller
     try {
       const res = await apiFetch(
-        `/api/files/text?path=${encodeURIComponent(path)}`
+        `/api/files/text?path=${encodeURIComponent(path)}`,
+        { signal: controller.signal }
       )
       if (!res.ok) throw new Error('Cannot open file')
       const data = await res.json()
-      if (id !== loadId || file?.path !== path) return
+      if (destroyed || id !== loadId || controller.signal.aborted) return
       content = original = data.content
     } catch {
-      if (id !== loadId || file?.path !== path) return
+      if (destroyed || id !== loadId || controller.signal.aborted) return
       error($i18n('Cannot open file'))
       onClose()
     } finally {
-      if (id === loadId) loading = false
+      if (!destroyed && id === loadId) {
+        loading = false
+        loadController = null
+      }
     }
   }
 
   async function save() {
     if (!file || loading || saving || content === original) return
     const path = file.path
+    const id = loadId
     const savedContent = content
     saving = true
     try {
@@ -51,10 +67,12 @@
         body: JSON.stringify({ path, content: savedContent })
       })
       if (!res.ok) throw new Error('Save failed')
-      if (file?.path === path) original = savedContent
-      success($i18n('Saved'))
+      if (!destroyed && id === loadId && file?.path === path) {
+        original = savedContent
+        success($i18n('Saved'))
+      }
     } catch {
-      error($i18n('Save failed'))
+      if (!destroyed && id === loadId) error($i18n('Save failed'))
     } finally {
       saving = false
     }
@@ -72,11 +90,17 @@
 
   function handleKey(e) {
     if (!file) return
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault()
       save()
     }
   }
+
+  onDestroy(() => {
+    destroyed = true
+    loadId++
+    loadController?.abort()
+  })
 
   $: isDirty = content !== original
   $: lineCount = content.split('\n').length
@@ -85,7 +109,7 @@
 <svelte:window
   onkeydown={handleKey}
   onbeforeunload={(event) => {
-    if (file && isDirty) {
+    if (file && (isDirty || saving)) {
       event.preventDefault()
       event.returnValue = ''
     }
@@ -111,7 +135,11 @@
           <span class="meta"
             >{$i18n('{count} lines', { count: lineCount })}</span
           >
-          <button onclick={save} disabled={saving || !isDirty} class="save-btn">
+          <button
+            onclick={save}
+            disabled={loading || saving || !isDirty}
+            class="save-btn"
+          >
             {saving ? $i18n('Saving…') : $i18n('Save (Ctrl+S)')}
           </button>
           <button

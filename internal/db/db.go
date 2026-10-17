@@ -63,6 +63,9 @@ func (d *DB) migrate() error {
 	if err := d.migrateSources(); err != nil {
 		return err
 	}
+	if err := d.migrateAgents(); err != nil {
+		return err
+	}
 	return d.migrateTOTP()
 }
 

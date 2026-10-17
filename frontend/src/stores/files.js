@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import { apiFetch } from './auth.js'
 import { requireOK, saveDownload } from '../lib/files.js'
 
@@ -39,11 +39,21 @@ export async function loadFiles(path = '', options = {}) {
   listController = controller
   loading.set(true)
   loadError.set('')
-  if (path !== listedPath) listOptions.page = 1
+  const nextOptions = {
+    ...listOptions,
+    ...(path !== listedPath ? { page: 1 } : {}),
+    ...options
+  }
+  const sameListing =
+    path === listedPath &&
+    Object.keys(nextOptions).every(
+      (key) => nextOptions[key] === listOptions[key]
+    )
+  const previousPaths = new Set(get(files).files.map((file) => file.path))
   listedPath = path
-  listOptions = { ...listOptions, ...options }
+  listOptions = nextOptions
   currentPath.set(path)
-  selected.set(new Set())
+  if (!sameListing) selected.set(new Set())
   try {
     const query = new URLSearchParams({ path, per_page: 100, ...listOptions })
     const res = await requireOK(
@@ -55,6 +65,20 @@ export async function loadFiles(path = '', options = {}) {
     const lastPage = Math.max(1, Math.ceil(result.total / result.per_page))
     if (result.page > lastPage) return loadFiles(path, { page: lastPage })
     files.set({ ...result, files: result.files || [] })
+    if (sameListing) {
+      const visiblePaths = new Set(
+        (result.files || []).map((file) => file.path)
+      )
+      // Recursive search can select files outside the current folder listing.
+      selected.update(
+        (paths) =>
+          new Set(
+            [...paths].filter(
+              (item) => !previousPaths.has(item) || visiblePaths.has(item)
+            )
+          )
+      )
+    }
   } catch (error) {
     if (!controller.signal.aborted) {
       files.set({ files: [], total: 0, page: 1, per_page: 100 })

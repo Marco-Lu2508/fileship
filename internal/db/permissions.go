@@ -70,8 +70,14 @@ func (d *DB) CheckPermission(userID int64, relPath string, action string) (bool,
 	if err != nil {
 		return false, err
 	}
+	return PathPermissionAllowed(perms, relPath, action), nil
+}
+
+// PathPermissionAllowed evaluates an already loaded rule set. Listings can
+// apply the same rules to every entry without one database query per file.
+func PathPermissionAllowed(perms []model.PathPermission, relPath, action string) bool {
 	if len(perms) == 0 {
-		return true, nil // keine Regeln = alles erlaubt
+		return true // keine Regeln = alles erlaubt
 	}
 
 	relPath = strings.Trim(filepath.ToSlash(filepath.Clean(relPath)), "/")
@@ -96,18 +102,18 @@ func (d *DB) CheckPermission(userID int64, relPath string, action string) (bool,
 	}
 
 	if best == nil {
-		return true, nil // kein Treffer = erlaubt
+		return true // kein Treffer = erlaubt
 	}
 
 	switch action {
 	case "read":
-		return best.CanRead, nil
+		return best.CanRead
 	case "write":
-		return best.CanWrite, nil
+		return best.CanWrite
 	case "delete":
-		return best.CanDelete, nil
+		return best.CanDelete
 	case "share":
-		return best.CanShare, nil
+		return best.CanShare
 	}
-	return true, nil
+	return true
 }

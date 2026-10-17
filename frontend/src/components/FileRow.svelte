@@ -18,7 +18,8 @@
   import { fileKind, formatBytes, validName } from '../lib/files.js'
   import Icon from './Icon.svelte'
   import { preferences } from '../stores/preferences.js'
-  import { accessToken } from '../stores/auth.js'
+  import { accessToken, activeSourceId, activeAgentId } from '../stores/auth.js'
+  import { getSourceParam } from '../stores/sources.js'
   export let file
   export let showPath = false
   export let gallery = false,
@@ -194,7 +195,9 @@
       class:thumbnail={gallery && kind === 'image' && !thumbnailFailed}
       >{#if gallery && kind === 'image' && !thumbnailFailed}<img
           loading="lazy"
-          src={`/api/files/thumb?${new URLSearchParams({ path: file.path, access_token: $accessToken })}`}
+          width="160"
+          height="130"
+          src={`/api/files/thumb?${new URLSearchParams({ path: file.path, access_token: $accessToken })}${getSourceParam($activeSourceId, $activeAgentId)}`}
           alt=""
           onerror={() => (thumbnailFailed = true)}
         />{:else}<Icon name={kind} size={19} />{/if}</span

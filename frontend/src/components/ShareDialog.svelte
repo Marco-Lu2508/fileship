@@ -11,6 +11,7 @@
   let expiresIn = 24
   let password = ''
   let downloadLimit = 0
+  let allowUpload = false
   let shareUrl = ''
   let loading = false
   let step = 'form' // 'form' | 'done'
@@ -21,6 +22,7 @@
     expiresIn = 24
     password = ''
     downloadLimit = 0
+    allowUpload = false
     shareUrl = ''
     loading = false
     step = 'form'
@@ -32,7 +34,8 @@
       path: file.path,
       is_dir: file.is_dir,
       expires_in_hours: expiresIn > 0 ? expiresIn : null,
-      download_limit: downloadLimit > 0 ? downloadLimit : 0
+      download_limit: downloadLimit > 0 ? downloadLimit : 0,
+      allow_upload: file.is_dir ? allowUpload : false
     }
     if (password) body.password = password
 
@@ -139,6 +142,16 @@
               bind:value={downloadLimit}
             />
           </div>
+
+          {#if file.is_dir}
+            <div class="field-group">
+              <label class="field-label" style="cursor:pointer">
+                <input type="checkbox" bind:checked={allowUpload} />
+                <Icon name="upload" size={12} />
+                Allow guest uploads (File-Drop)
+              </label>
+            </div>
+          {/if}
 
           <button class="generate-btn" onclick={createShare} disabled={loading}>
             {#if loading}

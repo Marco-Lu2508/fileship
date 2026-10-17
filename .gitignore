@@ -1,4 +1,6 @@
 /fileship
+/fileship.exe
+*.exe
 fileship.db
 data/
 .env

@@ -40,9 +40,46 @@
     box-shadow: var(--shadow-lg);
     overflow: auto;
     overscroll-behavior: contain;
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+    transition:
+      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      display 0.2s allow-discrete,
+      overlay 0.2s allow-discrete;
+  }
+  dialog[open] {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  @starting-style {
+    dialog[open] {
+      opacity: 0;
+      transform: scale(0.97) translateY(8px);
+    }
   }
   dialog::backdrop {
     background: #0b101b99;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transition:
+      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      display 0.2s allow-discrete,
+      overlay 0.2s allow-discrete;
+  }
+  dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    dialog,
+    dialog::backdrop {
+      transition: none;
+      transform: none;
+    }
   }
 </style>
