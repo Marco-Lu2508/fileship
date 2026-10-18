@@ -276,3 +276,151 @@ func TestTouchEnforcesAllowedTypesAndDeleteChecksDescendants(t *testing.T) {
 	}
 }
 
+func TestSourceCannotBypassPathPermissions(t *testing.T) {
+	h, _ := testWorkspace(t)
+	if err := h.db.CreateUser("sourced", "test-password", false, "/"); err != nil {
+		t.Fatal(err)
+	}
+	user, err := h.db.GetUserByUsername("sourced")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := &auth.Claims{UserID: user.ID}
+
+	if err := os.MkdirAll(filepath.Join(h.cfg.RootPath, "projects", "secret"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.cfg.RootPath, "projects", "secret", "keys.txt"), []byte("top-secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.cfg.RootPath, "projects", "readme.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.db.SetPathPermission(model.PathPermission{
+		UserID:    user.ID,
+		Path:      "projects/secret",
+		CanRead:   false,
+		CanWrite:  false,
+		CanDelete: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-admin cannot register a denied directory or traversal path as a source
+	for _, badRoot := range []string{"../outside", "/etc", "projects/secret"} {
+		req := requestWithClaims("POST", "/api/me/sources", claims)
+		req.Body = io.NopCloser(strings.NewReader(`{"name":"bad","root_path":"` + badRoot + `"}`))
+		w := httptest.NewRecorder()
+		h.createSource(w, req)
+		if w.Code != http.StatusBadRequest && w.Code != http.StatusForbidden {
+			t.Fatalf("expected source creation for %q to fail, got %d: %s", badRoot, w.Code, w.Body.String())
+		}
+	}
+
+	// Registering an allowed parent folder as a source succeeds
+	createReq := requestWithClaims("POST", "/api/me/sources", claims)
+	createReq.Body = io.NopCloser(strings.NewReader(`{"name":"Projects","root_path":"projects"}`))
+	createRec := httptest.NewRecorder()
+	h.createSource(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected valid source creation 201, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var src model.UserSource
+	if err := json.Unmarshal(createRec.Body.Bytes(), &src); err != nil {
+		t.Fatal(err)
+	}
+	srcID := strconv.FormatInt(src.ID, 10)
+
+	// Listing root of source hides "secret" subfolder
+	listReq := requestWithClaims("GET", "/api/files", claims)
+	listReq.Header.Set("X-Source-ID", srcID)
+	listRec := httptest.NewRecorder()
+	h.listFiles(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("expected source listing 200, got %d: %s", listRec.Code, listRec.Body.String())
+	}
+	if strings.Contains(listRec.Body.String(), "secret") {
+		t.Fatalf("source listing leaked restricted subfolder: %s", listRec.Body.String())
+	}
+
+	// Direct read/write/delete inside restricted subfolder via source is still denied
+	dlReq := requestWithClaims("GET", "/api/files/download?path=secret/keys.txt", claims)
+	dlReq.Header.Set("X-Source-ID", srcID)
+	dlRec := httptest.NewRecorder()
+	h.downloadFile(dlRec, dlReq)
+	if dlRec.Code != http.StatusForbidden {
+		t.Fatalf("expected source download of restricted file to return 403, got %d", dlRec.Code)
+	}
+
+	touchReq := requestWithClaims("POST", "/api/files/touch", claims)
+	touchReq.Header.Set("X-Source-ID", srcID)
+	touchReq.Body = io.NopCloser(strings.NewReader(`{"path":"secret/new.txt"}`))
+	touchRec := httptest.NewRecorder()
+	h.touch(touchRec, touchReq)
+	if touchRec.Code != http.StatusForbidden {
+		t.Fatalf("expected source touch in restricted dir to return 403, got %d", touchRec.Code)
+	}
+}
+
+func TestPublicSharePasswordCookieRateLimitAndSubfolders(t *testing.T) {
+	h, claims := testWorkspace(t)
+	h.cfg.JWTSecret = "share-cookie-secret"
+	if err := os.MkdirAll(filepath.Join(h.cfg.RootPath, "shared", "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.cfg.RootPath, "shared", "sub", "hello.txt"), []byte("nested-ok"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	createReq := requestWithClaims("POST", "/api/shares", claims)
+	createReq.Body = io.NopCloser(strings.NewReader(`{"path":"shared","is_dir":true,"password":"correct-password"}`))
+	createRec := httptest.NewRecorder()
+	h.createShare(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("createShare failed: %d %s", createRec.Code, createRec.Body.String())
+	}
+	var created map[string]string
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	token := created["token"]
+
+	// POST password login sets HttpOnly cookie and redirects
+	postReq := httptest.NewRequest(http.MethodPost, "/s/"+token, strings.NewReader("pw=correct-password"))
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.RemoteAddr = "198.51.100.10:1234"
+	postRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect on valid share password POST, got %d", postRec.Code)
+	}
+	cookies := postRec.Result().Cookies()
+	if len(cookies) == 0 || !cookies[0].HttpOnly {
+		t.Fatalf("expected HttpOnly share auth cookie, got %+v", cookies)
+	}
+
+	// Browse subfolder using the auth cookie without password in URL
+	browseReq := httptest.NewRequest(http.MethodGet, "/s/"+token+"?dir=sub&view=1", nil)
+	browseReq.AddCookie(cookies[0])
+	browseRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(browseRec, browseReq)
+	if browseRec.Code != http.StatusOK || !strings.Contains(browseRec.Body.String(), "hello.txt") {
+		t.Fatalf("expected subfolder listing with hello.txt, got %d: %s", browseRec.Code, browseRec.Body.String())
+	}
+
+	// Brute-force from another IP triggers 429 Too Many Requests
+	got429 := false
+	for i := 0; i < 15; i++ {
+		badReq := httptest.NewRequest(http.MethodGet, "/s/"+token+"?pw=wrong", nil)
+		badReq.RemoteAddr = "198.51.100.99:4321"
+		badRec := httptest.NewRecorder()
+		h.Routes().ServeHTTP(badRec, badReq)
+		if badRec.Code == http.StatusTooManyRequests {
+			got429 = true
+			break
+		}
+	}
+	if !got429 {
+		t.Fatal("expected share password brute-force to be rate-limited with 429")
+	}
+}

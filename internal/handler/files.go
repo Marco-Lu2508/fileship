@@ -54,7 +54,7 @@ func (h *Handler) unzipFile(w http.ResponseWriter, r *http.Request) {
 		// Implicit parents also need write access. A rule on a directory must
 		// not be bypassed by selecting only a deeper child in the ZIP.
 		if !claims.IsAdmin {
-			for path := entry.Path; path != "."; path = filepath.ToSlash(filepath.Dir(path)) {
+			for path := h.permPath(r, entry.Path); path != "."; path = filepath.ToSlash(filepath.Dir(path)) {
 				if !db.PathPermissionAllowed(perms, path, "write") {
 					http.Error(w, "permission denied for path: "+path, http.StatusForbidden)
 					return

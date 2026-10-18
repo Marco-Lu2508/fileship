@@ -93,7 +93,7 @@ func (h *Handler) uploadChunk(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		for cur := targetRel; ; {
+		for cur := h.permPath(r, targetRel); ; {
 			if !db.PathPermissionAllowed(perms, cur, "write") {
 				http.Error(w, "permission denied for path: "+cur, http.StatusForbidden)
 				return

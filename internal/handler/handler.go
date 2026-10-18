@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/time/rate"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yourname/fileship/internal/agent"
@@ -22,31 +23,40 @@ import (
 )
 
 type Handler struct {
-	cfg      *config.Config
-	db       *db.DB
-	hub      *ws.Hub
-	indexer  *db.Indexer
-	agentHub *agent.Hub
+	cfg          *config.Config
+	db           *db.DB
+	hub          *ws.Hub
+	indexer      *db.Indexer
+	agentHub     *agent.Hub
+	loginLimiter *middleware.RateLimiter
 }
 
 func New(cfg *config.Config, database *db.DB, hub *ws.Hub) *Handler {
 	ix := db.NewIndexer(database)
 	ah := agent.NewHub(database.UpdateAgentHeartbeat)
-	return &Handler{cfg: cfg, db: database, hub: hub, indexer: ix, agentHub: ah}
+	ll := middleware.NewRateLimiter(rate.Every(6*time.Second), 10)
+	return &Handler{cfg: cfg, db: database, hub: hub, indexer: ix, agentHub: ah, loginLimiter: ll}
 }
 
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	loginLimiter := middleware.NewRateLimiter(5, 10)
+	// Brute-force protection: 10 attempts per minute per client, burst of 10.
+	// The same limiter guards password login, 2FA code check, and share passwords.
+	loginLimiter := h.loginLimiter
+	if loginLimiter == nil {
+		loginLimiter = middleware.NewRateLimiter(rate.Every(6*time.Second), 10)
+		h.loginLimiter = loginLimiter
+	}
 	globalLimiter := middleware.NewRateLimiter(50, 100)
 	r.Use(globalLimiter.Middleware)
 
 	r.Post("/api/auth/login", loginLimiter.Middleware(http.HandlerFunc(h.login)).ServeHTTP)
 	r.Post("/api/auth/refresh", h.refresh)
 	r.Post("/api/auth/logout", h.logout)
-	r.Post("/api/auth/2fa/verify", h.twoFAVerify) // Pending-Token → vollständiges Token
+	r.Post("/api/auth/2fa/verify", loginLimiter.Middleware(http.HandlerFunc(h.twoFAVerify)).ServeHTTP) // Pending-Token → vollständiges Token
 	r.Get("/s/{token}", h.PublicShare)
+	r.Post("/s/{token}", h.PublicShare)
 	r.Post("/s/{token}/upload", h.PublicShareUpload)
 	r.Get("/ws", h.hub.Handle)
 	r.Get("/api/agent/ws", h.agentWS)
@@ -300,6 +310,50 @@ func (h *Handler) userRoot(r *http.Request) string {
 	return baseRoot
 }
 
+// sourceRelPath returns the active source's relative path inside the user's
+// baseRoot for non-admin users, or "" if the user is on their default root.
+func (h *Handler) sourceRelPath(r *http.Request) string {
+	claims, ok := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
+	if !ok || claims == nil || claims.IsAdmin {
+		return ""
+	}
+	rawSrcID := r.Header.Get("X-Source-ID")
+	if rawSrcID == "" {
+		rawSrcID = r.URL.Query().Get("source_id")
+	}
+	if rawSrcID == "" {
+		return ""
+	}
+	srcID, err := strconv.ParseInt(rawSrcID, 10, 64)
+	if err != nil || srcID <= 0 {
+		return ""
+	}
+	src := h.db.GetSourceByID(claims.UserID, srcID)
+	if src == nil {
+		return ""
+	}
+	cleanRel, err := fsvc.CleanRelativePath(src.RootPath)
+	if err != nil {
+		return ""
+	}
+	return cleanRel
+}
+
+// permPath resolves relPath relative to the user's baseRoot even when a source
+// is active, so a non-admin cannot bypass PathPermission rules by mounting a
+// subdirectory as a source.
+func (h *Handler) permPath(r *http.Request, relPath string) string {
+	prefix := h.sourceRelPath(r)
+	if prefix == "" {
+		return relPath
+	}
+	clean, err := fsvc.CleanRelativePath(relPath)
+	if err != nil || clean == "" {
+		return prefix
+	}
+	return filepath.ToSlash(filepath.Join(prefix, clean))
+}
+
 // claimsUser gibt Claims + Username zurück
 func (h *Handler) claimsUser(r *http.Request) (*auth.Claims, string) {
 	claims := r.Context().Value(middleware.ClaimsKey).(*auth.Claims)
@@ -324,7 +378,7 @@ func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		allow = func(file model.FileInfo) bool {
-			return db.PathPermissionAllowed(permissions, file.Path, "read")
+			return db.PathPermissionAllowed(permissions, h.permPath(r, file.Path), "read")
 		}
 	}
 	page, _ := strconv.Atoi(q.Get("page"))
@@ -448,7 +502,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !claims.IsAdmin {
-			for p := rel; p != "." && p != ""; p = filepath.ToSlash(filepath.Dir(p)) {
+			for p := h.permPath(r, rel); p != "." && p != ""; p = filepath.ToSlash(filepath.Dir(p)) {
 				if !db.PathPermissionAllowed(perms, p, "write") {
 					http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
 					return
@@ -519,8 +573,9 @@ func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		if !db.PathPermissionAllowed(perms, cleanPath, "delete") {
-			http.Error(w, "permission denied for path: "+cleanPath, http.StatusForbidden)
+		targetPerm := h.permPath(r, cleanPath)
+		if !db.PathPermissionAllowed(perms, targetPerm, "delete") {
+			http.Error(w, "permission denied for path: "+targetPerm, http.StatusForbidden)
 			return
 		}
 		if info, statErr := os.Lstat(abs); statErr == nil && info.IsDir() {
@@ -534,7 +589,7 @@ func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
 				if relErr != nil {
 					return relErr
 				}
-				rel = filepath.ToSlash(rel)
+				rel = h.permPath(r, filepath.ToSlash(rel))
 				if !db.PathPermissionAllowed(perms, rel, "delete") {
 					denied = rel
 					return filepath.SkipAll
@@ -587,7 +642,7 @@ func (h *Handler) touch(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		for p := cleanPath; p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
+		for p := h.permPath(r, cleanPath); p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
 			if !db.PathPermissionAllowed(perms, p, "write") {
 				http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
 				return
@@ -633,7 +688,7 @@ func (h *Handler) mkdir(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		for p := cleanPath; p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
+		for p := h.permPath(r, cleanPath); p != "."; p = filepath.ToSlash(filepath.Dir(p)) {
 			if !db.PathPermissionAllowed(perms, p, "write") {
 				http.Error(w, "permission denied for path: "+p, http.StatusForbidden)
 				return
@@ -731,11 +786,20 @@ func (h *Handler) previewFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not a regular file", http.StatusBadRequest)
 		return
 	}
-	mime, _ := fsvc.DetectMime(root, rel)
-	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "inline")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+	if r.URL.Query().Get("transcode") == "1" && fsvc.IsVideo(rel) {
+		if !fsvc.FFmpegAvailable() {
+			http.Error(w, "ffmpeg not available for transcoding", http.StatusNotImplemented)
+			return
+		}
+		w.Header().Set("Content-Type", "video/mp4")
+		_ = fsvc.StreamVideoMP4(r.Context(), root, rel, w)
+		return
+	}
+	mime, _ := fsvc.DetectMime(root, rel)
+	w.Header().Set("Content-Type", mime)
 	http.ServeFile(w, r, abs)
 }
 

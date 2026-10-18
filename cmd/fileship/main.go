@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/yourname/fileship/internal/agent"
 	"github.com/yourname/fileship/internal/config"
@@ -46,6 +47,10 @@ func main() {
 
 	cfg := config.Load()
 
+	if err := middleware.SetTrustedProxies(os.Getenv("TRUSTED_PROXIES")); err != nil {
+		log.Fatal(err)
+	}
+
 	if err := os.MkdirAll(cfg.RootPath, 0755); err != nil {
 		log.Fatal("cannot create root path:", err)
 	}
@@ -81,20 +86,46 @@ func main() {
 	mux.Handle("/", staticFS)
 
 	// CSRF Middleware um den gesamten Mux
-	root := middleware.CSRF(cfg.TLSEnabled())(mux)
+	root := middleware.SecurityHeaders(cfg.TLSEnabled())(middleware.CSRF(cfg.TLSEnabled())(mux))
 
-	addr := ":" + cfg.Port
+	// No Read/WriteTimeout on purpose: uploads, downloads and video streams can
+	// legitimately run for a long time. ReadHeaderTimeout stops slowloris.
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           root,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		<-stop
+		log.Print("shutting down...")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Print("shutdown: ", err)
+		}
+	}()
+
+	var serveErr error
 	if cfg.TLSEnabled() {
 		log.Printf("🚀 Fileship running on https://localhost:%s (TLS)", cfg.Port)
 		log.Printf("   Root: %s | DB: %s", cfg.RootPath, cfg.DBPath)
-		if err := http.ListenAndServeTLS(addr, cfg.TLSCert, cfg.TLSKey, root); err != nil {
-			log.Fatal(err)
-		}
+		serveErr = srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
 	} else {
 		log.Printf("🚀 Fileship running on http://localhost:%s", cfg.Port)
 		log.Printf("   Root: %s | DB: %s", cfg.RootPath, cfg.DBPath)
-		if err := http.ListenAndServe(addr, root); err != nil {
-			log.Fatal(err)
-		}
+		serveErr = srv.ListenAndServe()
 	}
+	if serveErr != http.ErrServerClosed {
+		log.Fatal(serveErr)
+	}
+	// ListenAndServe returns as soon as Shutdown starts; wait until active
+	// requests have drained so the deferred database.Close() is safe.
+	<-shutdownDone
 }

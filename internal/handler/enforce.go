@@ -25,9 +25,10 @@ func (h *Handler) checkPerm(w http.ResponseWriter, r *http.Request, path, action
 	if claims.IsAdmin {
 		return true
 	}
-	allowed, err := h.db.CheckPermission(claims.UserID, path, action)
+	effPath := h.permPath(r, path)
+	allowed, err := h.db.CheckPermission(claims.UserID, effPath, action)
 	if err != nil || !allowed {
-		http.Error(w, "permission denied for path: "+path, http.StatusForbidden)
+		http.Error(w, "permission denied for path: "+effPath, http.StatusForbidden)
 		return false
 	}
 	return true
@@ -74,15 +75,17 @@ func (h *Handler) checkTransfer(w http.ResponseWriter, r *http.Request, src, dst
 		suffix, _ := filepath.Rel(source, current)
 		original := filepath.ToSlash(filepath.Join(src, suffix))
 		target := filepath.ToSlash(filepath.Join(dst, suffix))
+		origPerm := h.permPath(r, original)
+		targetPerm := h.permPath(r, target)
 		if !claims.IsAdmin {
-			for _, check := range []struct{ path, action string }{{original, "read"}, {target, "write"}} {
+			for _, check := range []struct{ path, action string }{{origPerm, "read"}, {targetPerm, "write"}} {
 				if !db.PathPermissionAllowed(permissions, check.path, check.action) {
 					return fmt.Errorf("permission denied for path: %s", check.path)
 				}
 			}
 			if moving {
-				if !db.PathPermissionAllowed(permissions, original, "write") {
-					return fmt.Errorf("permission denied for path: %s", original)
+				if !db.PathPermissionAllowed(permissions, origPerm, "write") {
+					return fmt.Errorf("permission denied for path: %s", origPerm)
 				}
 			}
 		}

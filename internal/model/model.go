@@ -30,7 +30,7 @@ type FileInfo struct {
 	ModTime  time.Time `json:"mod_time"`
 	MimeType string    `json:"mime_type,omitempty"`
 	DirSize  int64     `json:"dir_size,omitempty"` // Gecachte Ordnergröße
-	Starred  bool      `json:"starred,omitempty"` // Ist in Favoriten
+	Starred  bool      `json:"starred,omitempty"`  // Ist in Favoriten
 }
 
 type LoginRequest struct {

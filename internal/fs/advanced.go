@@ -1,9 +1,11 @@
 package fs
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"image/jpeg"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +77,37 @@ func GenerateVideoThumbnail(root, rel, thumbDir string) (string, error) {
 
 // FFmpegAvailable gibt zurück ob ffmpeg gefunden wurde
 func FFmpegAvailable() bool { return ffmpegPath != "" }
+
+// StreamVideoMP4 transcodes a video on the fly into a fragmented H.264/AAC MP4
+// stream so browsers can play MKV, AVI, WMV, FLV, MTS, 3GP, and legacy codecs.
+func StreamVideoMP4(ctx context.Context, root, rel string, w io.Writer) error {
+	if ffmpegPath == "" {
+		return fmt.Errorf("ffmpeg not available")
+	}
+	abs, err := Resolve(root, rel)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, ffmpegPath,
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", abs,
+		"-c:v", "libx264",
+		"-preset", "ultrafast",
+		"-crf", "23",
+		"-pix_fmt", "yuv420p",
+		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-ac", "2",
+		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+		"-f", "mp4",
+		"pipe:1",
+	)
+	cmd.Stdout = w
+	cmd.Stderr = nil
+	return cmd.Run()
+}
 
 // GenerateThumbnail erstellt ein 256x256 JPEG Thumbnail
 func GenerateThumbnail(root, rel, thumbDir string) (string, error) {

@@ -19,7 +19,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship .
 
 # Stage 3: Final minimal image
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata ffmpeg
 WORKDIR /app
 COPY --from=backend-builder /app/fileship /usr/local/bin/fileship
 RUN mkdir -p /data

@@ -150,7 +150,7 @@ func (h *Handler) trashRestore(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		for cur := restoreRel; ; {
+		for cur := h.permPath(r, restoreRel); ; {
 			if !db.PathPermissionAllowed(perms, cur, "write") {
 				http.Error(w, "permission denied for path: "+cur, http.StatusForbidden)
 				return
@@ -214,6 +214,50 @@ func (h *Handler) trashEmpty(w http.ResponseWriter, r *http.Request) {
 
 // ── Sources ───────────────────────────────────────────────────────────────────
 
+func (h *Handler) validateSourceRoot(w http.ResponseWriter, r *http.Request, rawRoot string) (string, bool) {
+	claims, _ := h.claimsUser(r)
+	user, err := h.db.GetUserByID(claims.UserID)
+	if err != nil || user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", false
+	}
+	baseRoot := h.resolveRoot(user.RootPath)
+
+	if user.IsAdmin && filepath.IsAbs(rawRoot) {
+		cleanAbs := filepath.Clean(rawRoot)
+		info, statErr := os.Stat(cleanAbs)
+		if statErr != nil || !info.IsDir() {
+			http.Error(w, "source root directory not found", http.StatusBadRequest)
+			return "", false
+		}
+		return cleanAbs, true
+	}
+
+	cleanRel, err := fsvc.CleanRelativePath(rawRoot)
+	if err != nil {
+		http.Error(w, "invalid source root_path", http.StatusBadRequest)
+		return "", false
+	}
+	abs, err := fsvc.Resolve(baseRoot, cleanRel)
+	if err != nil {
+		http.Error(w, "forbidden source root_path", http.StatusForbidden)
+		return "", false
+	}
+	info, err := os.Stat(abs)
+	if err != nil || !info.IsDir() {
+		http.Error(w, "source root directory not found", http.StatusBadRequest)
+		return "", false
+	}
+	if !user.IsAdmin {
+		allowed, permErr := h.db.CheckPermission(user.ID, cleanRel, "read")
+		if permErr != nil || !allowed {
+			http.Error(w, "permission denied for path: "+cleanRel, http.StatusForbidden)
+			return "", false
+		}
+	}
+	return cleanRel, true
+}
+
 func (h *Handler) listSources(w http.ResponseWriter, r *http.Request) {
 	claims, _ := h.claimsUser(r)
 	sources, err := h.db.ListSources(claims.UserID)
@@ -238,9 +282,13 @@ func (h *Handler) createSource(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name and root_path required", http.StatusBadRequest)
 		return
 	}
+	validRoot, ok := h.validateSourceRoot(w, r, body.RootPath)
+	if !ok {
+		return
+	}
 	claims, _ := h.claimsUser(r)
 
-	src, err := h.db.CreateSource(claims.UserID, body.Name, body.RootPath, body.IsDefault)
+	src, err := h.db.CreateSource(claims.UserID, body.Name, validRoot, body.IsDefault)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -261,12 +309,16 @@ func (h *Handler) updateSource(w http.ResponseWriter, r *http.Request) {
 		RootPath  string `json:"root_path"`
 		IsDefault bool   `json:"is_default"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" || body.RootPath == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	validRoot, ok := h.validateSourceRoot(w, r, body.RootPath)
+	if !ok {
+		return
+	}
 	claims, _ := h.claimsUser(r)
-	if err := h.db.UpdateSource(claims.UserID, id, body.Name, body.RootPath, body.IsDefault); err != nil {
+	if err := h.db.UpdateSource(claims.UserID, id, body.Name, validRoot, body.IsDefault); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/yourname/fileship/internal/model"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/yourname/fileship/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
 

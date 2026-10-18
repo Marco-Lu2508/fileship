@@ -152,6 +152,24 @@ test('media navigation ignores old image errors and downloads use the attachment
   )
 })
 
+test('video preview retries with live transcode=1 stream before showing error state', async () => {
+  const { target } = render(Preview, {
+    file: file('clips/camera.mkv', 'video/x-matroska')
+  })
+  const video = target.querySelector('video')
+  assert.ok(video)
+  assert.equal(new URL(video.src).searchParams.get('transcode'), null)
+  video.dispatchEvent(new Event('error'))
+  flushSync()
+  const retriedVideo = target.querySelector('video')
+  assert.ok(retriedVideo)
+  assert.equal(new URL(retriedVideo.src).searchParams.get('transcode'), '1')
+  retriedVideo.dispatchEvent(new Event('error'))
+  flushSync()
+  assert.equal(target.querySelector('video'), null)
+  assert.match(target.textContent, /Preview could not be loaded/)
+})
+
 test('translating and refreshing file metadata preserve a loaded preview', async () => {
   let loads = 0
   globalThis.fetch = async () => {

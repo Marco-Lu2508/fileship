@@ -35,6 +35,7 @@
   let isMuted = false
   let videoNaturalWidth = 0
   let videoNaturalHeight = 0
+  let transcodeFallback = false
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
@@ -50,6 +51,7 @@
     mediaPaused = true
     videoNaturalWidth = 0
     videoNaturalHeight = 0
+    transcodeFallback = false
   }
   function navigate(offset) {
     if (
@@ -270,6 +272,10 @@
   $: previewUrl = file
     ? `/api/files/preview?path=${encodeURIComponent(file.path)}&access_token=${token}${sourceSuffix}`
     : ''
+  $: videoSrc =
+    isVideo && transcodeFallback && previewUrl
+      ? `${previewUrl}&transcode=1`
+      : previewUrl
   $: downloadUrl = file
     ? `/api/files/download?path=${encodeURIComponent(file.path)}&access_token=${token}${sourceSuffix}`
     : ''
@@ -312,8 +318,15 @@
   }
 
   function mediaError(event) {
-    if (!destroyed && event.currentTarget.getAttribute('src') === previewUrl)
+    if (destroyed) return
+    const src = event.currentTarget.getAttribute('src')
+    if (isVideo && src === previewUrl && !transcodeFallback) {
+      transcodeFallback = true
+      return
+    }
+    if (src === previewUrl || src === videoSrc) {
       loadError = true
+    }
   }
 
   onDestroy(() => {
@@ -443,7 +456,7 @@
                   controls
                   playsinline
                   preload="metadata"
-                  src={previewUrl}
+                  src={videoSrc}
                   onloadedmetadata={handleVideoMetadata}
                   onplay={() => {
                     mediaPaused = false

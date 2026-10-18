@@ -15,9 +15,9 @@ const (
 )
 
 type Claims struct {
-	UserID       int64  `json:"uid"`
-	IsAdmin      bool   `json:"adm"`
-	TwoFAPending bool   `json:"2fa_pending,omitempty"` // true = 2FA noch nicht abgeschlossen
+	UserID       int64 `json:"uid"`
+	IsAdmin      bool  `json:"adm"`
+	TwoFAPending bool  `json:"2fa_pending,omitempty"` // true = 2FA noch nicht abgeschlossen
 	jwt.RegisteredClaims
 }
 

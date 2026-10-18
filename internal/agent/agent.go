@@ -75,7 +75,7 @@ func (s *session) close() {
 type Hub struct {
 	mu          sync.RWMutex
 	sessions    map[int64]*session
-	reqSeq       atomic.Uint64
+	reqSeq      atomic.Uint64
 	onHeartbeat func(agentID int64, hostname, osInfo, rootPath string, diskUsage int64)
 }
 

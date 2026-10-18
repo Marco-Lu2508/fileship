@@ -52,8 +52,9 @@ func (h *Handler) serveArchive(w http.ResponseWriter, r *http.Request, paths []s
 			return
 		}
 		for _, entry := range entries {
-			if !db.PathPermissionAllowed(perms, entry.Name, "read") {
-				http.Error(w, "permission denied for path: "+entry.Name, http.StatusForbidden)
+			permName := h.permPath(r, entry.Name)
+			if !db.PathPermissionAllowed(perms, permName, "read") {
+				http.Error(w, "permission denied for path: "+permName, http.StatusForbidden)
 				return
 			}
 		}

@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -31,10 +34,14 @@ func (h *Handler) searchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, _ := h.claimsUser(r)
 
-	// Index-Suche bevorzugen
-	results, err := h.db.IndexSearch(claims.UserID, query, 200)
-	if err != nil || len(results) == 0 {
-		// Fallback: direktes Filesystem-Walk
+	hasSource := r.Header.Get("X-Source-ID") != "" || r.URL.Query().Get("source_id") != ""
+	var results []model.FileInfo
+	var err error
+	if !hasSource {
+		results, err = h.db.IndexSearch(claims.UserID, query, 200)
+	}
+	if hasSource || err != nil || len(results) == 0 {
+		// Fallback bzw. direkte Suche in aktiver Source
 		results, err = fsvc.Search(h.userRoot(r), query)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -52,7 +59,7 @@ func (h *Handler) searchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	visible := make([]model.FileInfo, 0, len(results))
 	for _, file := range results {
-		if !claims.IsAdmin && !db.PathPermissionAllowed(perms, file.Path, "read") {
+		if !claims.IsAdmin && !db.PathPermissionAllowed(perms, h.permPath(r, file.Path), "read") {
 			continue
 		}
 		visible = append(visible, file)
@@ -177,14 +184,15 @@ func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid share target", http.StatusBadRequest)
 		return
 	}
+	effSharePath := h.permPath(r, cleanPath)
 	if !claims.IsAdmin {
 		perms, err := h.db.ListPathPermissions(claims.UserID)
 		if err != nil {
 			http.Error(w, "cannot read permissions", http.StatusInternalServerError)
 			return
 		}
-		if !db.PathPermissionAllowed(perms, cleanPath, "read") || !db.PathPermissionAllowed(perms, cleanPath, "share") {
-			http.Error(w, "permission denied for path: "+cleanPath, http.StatusForbidden)
+		if !db.PathPermissionAllowed(perms, effSharePath, "read") || !db.PathPermissionAllowed(perms, effSharePath, "share") {
+			http.Error(w, "permission denied for path: "+effSharePath, http.StatusForbidden)
 			return
 		}
 		if info.IsDir() {
@@ -194,8 +202,9 @@ func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			for _, entry := range entries {
-				if !db.PathPermissionAllowed(perms, entry.Name, "read") || !db.PathPermissionAllowed(perms, entry.Name, "share") {
-					http.Error(w, "permission denied for path: "+entry.Name, http.StatusForbidden)
+				permEntry := h.permPath(r, entry.Name)
+				if !db.PathPermissionAllowed(perms, permEntry, "read") || !db.PathPermissionAllowed(perms, permEntry, "share") {
+					http.Error(w, "permission denied for path: "+permEntry, http.StatusForbidden)
 					return
 				}
 			}
@@ -218,7 +227,7 @@ func (h *Handler) createShare(w http.ResponseWriter, r *http.Request) {
 		passwordHash = string(hash)
 	}
 
-	token, err := h.db.CreateShareLink(cleanPath, info.IsDir(), claims.UserID, expiresAt, passwordHash, body.DownloadLimit, body.AllowUpload, body.AllowEdit)
+	token, err := h.db.CreateShareLink(effSharePath, info.IsDir(), claims.UserID, expiresAt, passwordHash, body.DownloadLimit, body.AllowUpload, body.AllowEdit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -255,6 +264,37 @@ func (h *Handler) deleteShare(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func shareCookieName(token string) string {
+	return "fileship_share_" + token
+}
+
+func (h *Handler) shareCookieMAC(token, passwordHash string) string {
+	mac := hmac.New(sha256.New, []byte(h.cfg.JWTSecret))
+	mac.Write([]byte(token + ":" + passwordHash))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (h *Handler) hasValidShareCookie(r *http.Request, token, passwordHash string) bool {
+	c, err := r.Cookie(shareCookieName(token))
+	if err != nil || c == nil || c.Value == "" {
+		return false
+	}
+	expected := h.shareCookieMAC(token, passwordHash)
+	return hmac.Equal([]byte(c.Value), []byte(expected))
+}
+
+func (h *Handler) setShareAuthCookie(w http.ResponseWriter, token, passwordHash string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     shareCookieName(token),
+		Value:    h.shareCookieMAC(token, passwordHash),
+		Path:     "/s/" + token,
+		HttpOnly: true,
+		Secure:   h.cfg.TLSCert != "" && h.cfg.TLSKey != "",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
+}
+
 // Public share download & interactive folder portal — kein Auth nötig
 func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
@@ -265,16 +305,46 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pw := r.URL.Query().Get("pw")
-	if share.PasswordHash != "" {
-		if pw == "" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(sharePasswordPage(token)))
-			return
+	if r.Method == http.MethodPost {
+		_ = r.ParseForm()
+		if formPW := r.FormValue("pw"); formPW != "" {
+			pw = formPW
 		}
-		if bcrypt.CompareHashAndPassword([]byte(share.PasswordHash), []byte(pw)) != nil {
-			http.Error(w, "wrong password", http.StatusUnauthorized)
-			return
+	}
+
+	if share.PasswordHash != "" {
+		if !h.hasValidShareCookie(r, token, share.PasswordHash) {
+			if pw == "" {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(sharePasswordPage(token, "")))
+				return
+			}
+			if h.loginLimiter != nil && !h.loginLimiter.AllowRequest(r) {
+				http.Error(w, "too many password attempts, please try again later", http.StatusTooManyRequests)
+				return
+			}
+			if bcrypt.CompareHashAndPassword([]byte(share.PasswordHash), []byte(pw)) != nil {
+				if r.Method == http.MethodPost || strings.Contains(r.Header.Get("Accept"), "text/html") {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(sharePasswordPage(token, "Invalid password. Please try again.")))
+					return
+				}
+				http.Error(w, "wrong password", http.StatusUnauthorized)
+				return
+			}
+			h.setShareAuthCookie(w, token, share.PasswordHash)
+			if r.Method == http.MethodPost {
+				http.Redirect(w, r, "/s/"+url.PathEscape(token), http.StatusSeeOther)
+				return
+			}
+		} else {
+			pw = ""
+			if r.Method == http.MethodPost {
+				http.Redirect(w, r, "/s/"+url.PathEscape(token), http.StatusSeeOther)
+				return
+			}
 		}
 	}
 
@@ -340,16 +410,39 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 		// Interaktive Ordner-Ansicht im Browser (sofern nicht ?zip=1 angefordert wurde)
 		wantsHTML := r.URL.Query().Get("view") == "1" || (r.URL.Query().Get("zip") == "" && strings.Contains(r.Header.Get("Accept"), "text/html"))
 		if wantsHTML {
-			list, listErr := fsvc.List(root, share.Path)
+			subDir := ""
+			browsePath := share.Path
+			if rawDir := r.URL.Query().Get("dir"); rawDir != "" {
+				cleanDir, dirErr := fsvc.CleanRelativePath(rawDir)
+				if dirErr != nil {
+					http.Error(w, "invalid directory path", http.StatusBadRequest)
+					return
+				}
+				subDir = cleanDir
+				browsePath = filepath.ToSlash(filepath.Join(share.Path, cleanDir))
+				if !user.IsAdmin && (!db.PathPermissionAllowed(perms, browsePath, "read") || !db.PathPermissionAllowed(perms, browsePath, "share")) {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+				absDir, resolveErr := fsvc.Resolve(root, browsePath)
+				if resolveErr != nil {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+				infoDir, statErr := os.Stat(absDir)
+				if statErr != nil || !infoDir.IsDir() {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+			}
+
+			list, listErr := fsvc.List(root, browsePath)
 			if listErr != nil {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
 			visible := make([]model.FileInfo, 0, len(list))
 			for _, f := range list {
-				if f.IsDir {
-					continue
-				}
 				if !user.IsAdmin && (!db.PathPermissionAllowed(perms, f.Path, "read") || !db.PathPermissionAllowed(perms, f.Path, "share")) {
 					continue
 				}
@@ -360,7 +453,7 @@ func (h *Handler) PublicShare(w http.ResponseWriter, r *http.Request) {
 				visible = append(visible, f)
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(shareFolderPage(token, filepath.Base(share.Path), pw, share.AllowUpload, r.URL.Query().Get("uploaded") == "1", visible)))
+			w.Write([]byte(shareFolderPage(token, filepath.Base(share.Path), subDir, pw, share.AllowUpload, r.URL.Query().Get("uploaded") == "1", visible)))
 			return
 		}
 
@@ -429,14 +522,25 @@ func (h *Handler) PublicShareUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "file too large or invalid form", http.StatusBadRequest)
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
+
 	pw := r.URL.Query().Get("pw")
 	if pw == "" {
 		pw = r.FormValue("pw")
 	}
 	if share.PasswordHash != "" {
-		if bcrypt.CompareHashAndPassword([]byte(share.PasswordHash), []byte(pw)) != nil {
-			http.Error(w, "wrong password", http.StatusUnauthorized)
-			return
+		if !h.hasValidShareCookie(r, token, share.PasswordHash) {
+			if h.loginLimiter != nil && !h.loginLimiter.AllowRequest(r) {
+				http.Error(w, "too many password attempts, please try again later", http.StatusTooManyRequests)
+				return
+			}
+			if bcrypt.CompareHashAndPassword([]byte(share.PasswordHash), []byte(pw)) != nil {
+				http.Error(w, "wrong password", http.StatusUnauthorized)
+				return
+			}
+			h.setShareAuthCookie(w, token, share.PasswordHash)
+		} else {
+			pw = ""
 		}
 	}
 
@@ -464,6 +568,18 @@ func (h *Handler) PublicShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	subDir := ""
+	targetBase := share.Path
+	if rawDir := r.FormValue("dir"); rawDir != "" {
+		cleanDir, dirErr := fsvc.CleanRelativePath(rawDir)
+		if dirErr != nil {
+			http.Error(w, "invalid target directory", http.StatusBadRequest)
+			return
+		}
+		subDir = cleanDir
+		targetBase = filepath.ToSlash(filepath.Join(share.Path, cleanDir))
+	}
+
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
 		http.Error(w, "no files provided", http.StatusBadRequest)
@@ -478,15 +594,19 @@ func (h *Handler) PublicShareUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		rel := filepath.ToSlash(filepath.Join(share.Path, cleanName))
+		rel := filepath.ToSlash(filepath.Join(targetBase, cleanName))
 		abs, resolveErr := fsvc.Resolve(root, rel)
 		if resolveErr != nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if !user.IsAdmin && !db.PathPermissionAllowed(perms, rel, "write") {
-			http.Error(w, "permission denied", http.StatusForbidden)
-			return
+		if !user.IsAdmin {
+			for p := rel; p != "." && p != ""; p = filepath.ToSlash(filepath.Dir(p)) {
+				if !db.PathPermissionAllowed(perms, p, "write") {
+					http.Error(w, "permission denied", http.StatusForbidden)
+					return
+				}
+			}
 		}
 		if !fsvc.TypeAllowed(rel, effectiveTypes) {
 			http.Error(w, "file type not allowed", http.StatusForbidden)
@@ -522,11 +642,14 @@ func (h *Handler) PublicShareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		h.db.LogAction(user.ID, user.Username, "share_upload", targetRels[i], r.RemoteAddr)
 	}
-	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: share.Path})
+	h.hub.Broadcast(model.WSEvent{Type: "upload", Path: targetBase})
 	h.indexer.TriggerReindex(user.ID, root)
 
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		redirectURL := "/s/" + url.PathEscape(token) + "?uploaded=1"
+		if subDir != "" {
+			redirectURL += "&dir=" + url.QueryEscape(subDir)
+		}
 		if pw != "" {
 			redirectURL += "&pw=" + url.QueryEscape(pw)
 		}
@@ -536,18 +659,49 @@ func (h *Handler) PublicShareUpload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func shareFolderPage(token, folderName, pw string, allowUpload, uploaded bool, files []model.FileInfo) string {
+func shareFolderPage(token, folderName, subDir, pw string, allowUpload, uploaded bool, files []model.FileInfo) string {
 	pwQuery := ""
 	if pw != "" {
 		pwQuery = "&pw=" + url.QueryEscape(pw)
 	}
 	var rows strings.Builder
+	if subDir != "" {
+		parentDir := filepath.ToSlash(filepath.Dir(subDir))
+		parentHref := "/s/" + url.PathEscape(token) + "?view=1" + pwQuery
+		if parentDir != "." && parentDir != "" {
+			parentHref += "&dir=" + url.QueryEscape(parentDir)
+		}
+		rows.WriteString(fmt.Sprintf(`
+			<div class="row">
+				<div class="meta">
+					<strong>⬅ ..</strong>
+					<span>Parent folder</span>
+				</div>
+				<div class="actions">
+					<a class="btn ghost" href="%s">Back</a>
+				</div>
+			</div>`, parentHref))
+	}
 	if len(files) == 0 {
 		rows.WriteString(`<div class="empty">This shared folder is currently empty.</div>`)
 	} else {
 		for _, f := range files {
 			fileEsc := html.EscapeString(f.Name)
 			fileParam := url.QueryEscape(f.Path)
+			if f.IsDir {
+				dirHref := fmt.Sprintf("/s/%s?dir=%s%s", url.PathEscape(token), fileParam, pwQuery)
+				rows.WriteString(fmt.Sprintf(`
+				<div class="row">
+					<div class="meta">
+						<strong>📁 %s</strong>
+						<span>Folder · %s</span>
+					</div>
+					<div class="actions">
+						<a class="btn ghost" href="%s">Open</a>
+					</div>
+				</div>`, fileEsc, f.ModTime.Format("2006-01-02 15:04"), dirHref))
+				continue
+			}
 			dlHref := fmt.Sprintf("/s/%s?file=%s%s", url.PathEscape(token), fileParam, pwQuery)
 			prevHref := dlHref + "&inline=1"
 			rows.WriteString(fmt.Sprintf(`
@@ -576,14 +730,19 @@ func shareFolderPage(token, folderName, pw string, allowUpload, uploaded bool, f
 			%s
 			<form method="POST" action="/s/%s/upload" enctype="multipart/form-data">
 				<input type="hidden" name="pw" value="%s">
+				<input type="hidden" name="dir" value="%s">
 				<input type="file" name="files" multiple required>
 				<button type="submit" class="btn primary">Upload files</button>
 			</form>
-		</div>`, banner, html.EscapeString(token), html.EscapeString(pw))
+		</div>`, banner, html.EscapeString(token), html.EscapeString(pw), html.EscapeString(subDir))
 	}
 
+	displayTitle := folderName
+	if subDir != "" {
+		displayTitle = folderName + " / " + subDir
+	}
 	zipHref := fmt.Sprintf("/s/%s?zip=1%s", url.PathEscape(token), pwQuery)
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shared Folder · ` + html.EscapeString(folderName) + `</title>
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shared Folder · ` + html.EscapeString(displayTitle) + `</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0f172a;color:#f1f5f9;font-family:system-ui,-apple-system,sans-serif;padding:2rem 1rem}
@@ -609,7 +768,7 @@ input[type=file]{background:#0f172a;border:1px dashed #475569;color:#e2e8f0;padd
 	<div class="card">
 		<div class="head">
 			<div>
-				<h2>📁 ` + html.EscapeString(folderName) + `</h2>
+				<h2>📁 ` + html.EscapeString(displayTitle) + `</h2>
 				<small style="color:#94a3b8">Shared via Fileship</small>
 			</div>
 			<a class="btn" href="` + zipHref + `">⬇ Download All (.ZIP)</a>
@@ -622,28 +781,33 @@ input[type=file]{background:#0f172a;border:1px dashed #475569;color:#e2e8f0;padd
 }
 
 // sharePasswordPage liefert ein minimales HTML-Formular für Passwort-geschützte Shares
-func sharePasswordPage(token string) string {
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Protected Share</title>
+func sharePasswordPage(token, errMsg string) string {
+	errBanner := ""
+	if errMsg != "" {
+		errBanner = `<div class="err">` + html.EscapeString(errMsg) + `</div>`
+	}
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Protected Share</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#111827;color:#edf2f7;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+body{background:#111827;color:#edf2f7;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
 .card{background:#1d2a3d;border:1px solid #304158;border-radius:10px;padding:2rem;width:100%;max-width:360px;display:flex;flex-direction:column;gap:1rem}
 h2{font-size:1.1rem;color:#5ca7ff}
 p{color:#9aabc0;font-size:.85rem}
+.err{background:#7f1d1d;color:#fecaca;padding:.55rem .75rem;border-radius:6px;font-size:.82rem}
 input{background:#152238;border:1px solid #304158;color:#edf2f7;padding:.6rem .8rem;border-radius:6px;font-size:.9rem;width:100%}
 input:focus{outline:none;border-color:#5ca7ff}
-button{background:#5ca7ff;border:none;color:#fff;padding:.65rem;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:600}
+button{background:#5ca7ff;border:none;color:#fff;padding:.65rem;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:600;width:100%}
 button:hover{background:#388be8}
 </style>
 </head><body>
 <div class="card">
   <h2>🔒 Protected Share</h2>
   <p>This link is password-protected. Enter the password to access it.</p>
-  <form method="GET">
-    <input type="hidden" name="token" value="` + html.EscapeString(token) + `">
+  ` + errBanner + `
+  <form method="POST" action="/s/` + url.PathEscape(token) + `">
     <input type="password" name="pw" placeholder="Password" autofocus required>
     <br><br>
-    <button type="submit">Access file</button>
+    <button type="submit">Access share</button>
   </form>
 </div>
 </body></html>`
@@ -693,6 +857,10 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 	if body.Password != "" {
+		if len(body.Password) < 8 {
+			http.Error(w, "password too short (min 8 chars)", http.StatusBadRequest)
+			return
+		}
 		hash, _ := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
 		h.db.UpdateUserPassword(id, string(hash))
 	}
@@ -725,10 +893,7 @@ func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
 	diskUsage, _ := fsvc.DirSize(h.cfg.RootPath)
 	// Disk-Usage pro User berechnen
 	for i, u := range users {
-		root := h.cfg.RootPath
-		if u.RootPath != "/" && u.RootPath != "" {
-			root = u.RootPath
-		}
+		root := h.resolveRoot(u.RootPath)
 		users[i].DiskUsage, _ = fsvc.DirSize(root)
 	}
 	w.Header().Set("Content-Type", "application/json")

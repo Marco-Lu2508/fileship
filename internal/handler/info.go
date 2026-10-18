@@ -99,7 +99,7 @@ func (h *Handler) fileInfo(w http.ResponseWriter, r *http.Request) {
 				return relErr
 			}
 			if !claims.IsAdmin {
-				if !db.PathPermissionAllowed(perms, filepath.ToSlash(rel), "read") {
+				if !db.PathPermissionAllowed(perms, h.permPath(r, filepath.ToSlash(rel)), "read") {
 					if entry.IsDir() {
 						return filepath.SkipDir
 					}

@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/yourname/fileship/internal/auth"
 	"github.com/gorilla/websocket"
+	"github.com/yourname/fileship/internal/auth"
 	"github.com/yourname/fileship/internal/model"
 )
 
@@ -19,8 +19,8 @@ type Hub struct {
 
 func NewHub(secret string) *Hub {
 	return &Hub{
-		clients:     make(map[*websocket.Conn]struct{}),
-		secret:      secret,
+		clients: make(map[*websocket.Conn]struct{}),
+		secret:  secret,
 	}
 }
 
