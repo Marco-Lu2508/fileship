@@ -22,7 +22,7 @@ export function fileKind(file) {
     return 'image'
   if (
     mime.startsWith('video/') ||
-    /\.(mp4|webm|ogg|ogv|mov|m4v|mkv|avi|flv|wmv|3gp|mts|m2ts)$/i.test(name)
+    /\.(mp4|webm|ogv|mov|m4v|mkv|avi|flv|wmv|3gp|mts|m2ts)$/i.test(name)
   )
     return 'video'
   if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|oga|m4a|flac)$/i.test(name))

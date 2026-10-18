@@ -266,8 +266,10 @@ func mimeType(name string) string {
 		return "video/x-ms-wmv"
 	case ".flv":
 		return "video/x-flv"
-	case ".ogv", ".ogg":
+	case ".ogv":
 		return "video/ogg"
+	case ".ogg", ".oga":
+		return "audio/ogg"
 	case ".3gp":
 		return "video/3gpp"
 	case ".mts", ".m2ts":

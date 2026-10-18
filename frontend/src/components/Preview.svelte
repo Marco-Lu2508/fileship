@@ -35,11 +35,8 @@
   let isMuted = false
   let videoNaturalWidth = 0
   let videoNaturalHeight = 0
-  let selectedAspect = 'auto'
-  let videoFit = 'contain'
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
-  const videoAspects = ['auto', '16:9', '9:16', '4:3', '1:1', '21:9']
 
   $: markdown =
     extension === 'md' && !rawMarkdown ? renderMarkdown(textContent) : ''
@@ -53,8 +50,6 @@
     mediaPaused = true
     videoNaturalWidth = 0
     videoNaturalHeight = 0
-    selectedAspect = 'auto'
-    videoFit = 'contain'
   }
   function navigate(offset) {
     if (
@@ -216,7 +211,6 @@
     [
       'mp4',
       'webm',
-      'ogg',
       'ogv',
       'mov',
       'm4v',
@@ -233,7 +227,7 @@
     if (!videoEl) return
     videoNaturalWidth = videoEl.videoWidth || 0
     videoNaturalHeight = videoEl.videoHeight || 0
-    duration = videoEl.duration || 0
+    videoEl.playbackRate = playbackRate
   }
 
   $: naturalRatio =
@@ -241,20 +235,6 @@
       ? videoNaturalWidth / videoNaturalHeight
       : 16 / 9
 
-  $: activeRatio =
-    selectedAspect === '16:9'
-      ? 16 / 9
-      : selectedAspect === '9:16'
-        ? 9 / 16
-        : selectedAspect === '4:3'
-          ? 4 / 3
-          : selectedAspect === '1:1'
-            ? 1
-            : selectedAspect === '21:9'
-              ? 21 / 9
-              : naturalRatio
-
-  $: isVertical = activeRatio < 0.95
   $: resolutionBadge =
     videoNaturalWidth > 0 && videoNaturalHeight > 0
       ? `${videoNaturalWidth}×${videoNaturalHeight}`
@@ -438,8 +418,9 @@
               <p>{$i18n('Preview could not be loaded.')}</p>
               {#if isVideo}
                 <p class="error-hint">
-                  {extension.toUpperCase()} Format wird vom Browser möglicherweise
-                  nicht nativ unterstützt.
+                  {$i18n(
+                    'This video format may not be supported by your browser. Download it to play it in another player.'
+                  )}
                 </p>
                 <a href={downloadUrl} download={file.name} class="btn primary">
                   <Icon name="download" size={13} />
@@ -456,134 +437,46 @@
             />
           {:else if isVideo}
             <div class="media-studio">
-              <div
-                class="video-stage"
-                class:vertical={isVertical}
-                style="--stage-aspect: {activeRatio};"
-              >
+              <div class="video-stage" style="--stage-aspect: {naturalRatio};">
                 <video
                   bind:this={videoEl}
                   controls
                   playsinline
                   preload="metadata"
-                  loop={loopMedia}
                   src={previewUrl}
-                  style="--video-fit: {videoFit};"
                   onloadedmetadata={handleVideoMetadata}
                   onplay={() => {
                     mediaPaused = false
-                    if (videoEl) {
-                      videoEl.playbackRate = playbackRate
-                      videoEl.volume = volume
-                      videoEl.muted = isMuted
-                    }
+                    if (videoEl) videoEl.playbackRate = playbackRate
                   }}
                   onpause={() => (mediaPaused = true)}
-                  ontimeupdate={() => (currentTime = videoEl?.currentTime || 0)}
-                  ondurationchange={() => (duration = videoEl?.duration || 0)}
                   onended={handleMediaEnded}
                   onerror={mediaError}><track kind="captions" /></video
                 >
               </div>
-              <div class="studio-timeline">
-                <input
-                  type="range"
-                  class="timeline-slider"
-                  min="0"
-                  max={duration || 100}
-                  step="0.1"
-                  value={currentTime}
-                  oninput={handleSeek}
-                  aria-label={$i18n('Seek position')}
-                />
-              </div>
-              <div class="studio-bar">
-                <div class="studio-left">
-                  <button class="btn" onclick={togglePlay}>
-                    {mediaPaused ? '▶ Play' : '⏸ Pause'}
-                  </button>
-                  <button class="btn" onclick={() => skipBy(-10)}>-10s</button>
-                  <button class="btn" onclick={() => skipBy(10)}>+10s</button>
-                  <span class="time-pill">
-                    {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
-                  </span>
-                  {#if resolutionBadge}
-                    <span class="res-badge">{resolutionBadge}</span>
-                  {/if}
-                  <div class="volume-control">
-                    <button
-                      class="volume-btn"
-                      onclick={toggleMute}
-                      aria-label={isMuted ? 'Unmute' : 'Mute'}
-                    >
-                      <Icon
-                        name={isMuted || volume === 0 ? 'volume_off' : 'volume'}
-                        size={15}
-                      />
-                    </button>
-                    <input
-                      type="range"
-                      class="volume-slider"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={isMuted ? 0 : volume}
-                      oninput={handleVolumeChange}
-                      aria-label="Volume"
-                    />
-                  </div>
-                </div>
-                <div class="studio-right">
-                  <div
-                    class="speed-group"
-                    role="group"
-                    aria-label="Aspect ratio"
-                  >
-                    {#each videoAspects as r}
-                      <button
-                        class="speed-pill"
-                        class:active={selectedAspect === r}
-                        onclick={() => (selectedAspect = r)}
-                        title={`Format: ${r}`}>{r}</button
-                      >
-                    {/each}
-                  </div>
-                  <button
-                    class="btn"
-                    title={videoFit === 'contain'
-                      ? 'Fit to screen'
-                      : 'Fill screen'}
-                    onclick={() =>
-                      (videoFit = videoFit === 'contain' ? 'cover' : 'contain')}
-                  >
-                    {videoFit === 'contain' ? 'Fit' : 'Fill'}
-                  </button>
-                  <div
-                    class="speed-group"
-                    role="group"
-                    aria-label="Playback speed"
+              <div class="video-info">
+                <span class="res-badge">
+                  {extension.toUpperCase()}{resolutionBadge
+                    ? ` · ${resolutionBadge}`
+                    : ''}
+                </span>
+                <div class="video-tools">
+                  <select
+                    class="speed-select"
+                    aria-label={$i18n('Playback speed')}
+                    value={playbackRate}
+                    onchange={(e) =>
+                      setSpeed(parseFloat(e.currentTarget.value))}
                   >
                     {#each speeds as s}
-                      <button
-                        class="speed-pill"
-                        class:active={playbackRate === s}
-                        onclick={() => setSpeed(s)}>{s}x</button
-                      >
+                      <option value={s}>{s}x</option>
                     {/each}
-                  </div>
-                  <button
-                    class="btn"
-                    class:primary={loopMedia}
-                    onclick={() => (loopMedia = !loopMedia)}>🔁 Loop</button
+                  </select>
+                  <button class="btn" onclick={togglePiP}
+                    >{$i18n('Picture in picture')}</button
                   >
-                  <button
-                    class="btn"
-                    class:primary={autoNext}
-                    onclick={() => (autoNext = !autoNext)}>⏭ Auto-Next</button
-                  >
-                  <button class="btn" onclick={togglePiP}>📺 PiP</button>
                   <button class="btn" onclick={captureSnapshot}
-                    >📸 Snapshot</button
+                    >{$i18n('Save frame')}</button
                   >
                 </div>
               </div>
@@ -962,12 +855,6 @@
     gap: 0.4rem;
     flex-wrap: wrap;
   }
-  .time-pill {
-    font-size: 0.75rem;
-    color: var(--text2);
-    font-variant-numeric: tabular-nums;
-    padding: 0 0.35rem;
-  }
   .speed-group {
     display: inline-flex;
     background: var(--bg);
@@ -1041,38 +928,49 @@
     white-space: nowrap;
   }
   .video-stage {
-    width: 100%;
-    max-width: 100%;
+    /* Width is limited by both the container and the height budget, so the
+       box always keeps the video's exact aspect ratio (16:9, 9:16, 4:3 ...). */
+    width: min(100%, calc(68vh * var(--stage-aspect, 1.7778)));
     aspect-ratio: var(--stage-aspect, 16 / 9);
-    max-height: min(72vh, 650px);
-    display: grid;
-    place-items: center;
-    background: #080b10;
+    margin: 0 auto;
+    background: #000;
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
-    margin: 0 auto;
-    position: relative;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  }
-  .video-stage.vertical {
-    max-width: min(100%, 420px);
   }
   video {
+    display: block;
     width: 100%;
     height: 100%;
-    object-fit: var(--video-fit, contain);
-    background: #080b10;
+    object-fit: contain;
+    background: #000;
+  }
+  .video-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .video-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .speed-select {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.8rem;
+    cursor: pointer;
   }
   .res-badge {
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     color: var(--text2);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 0.15rem 0.45rem;
-    border-radius: 4px;
     font-variant-numeric: tabular-nums;
-    font-weight: 500;
   }
   .error-hint {
     font-size: 0.85rem;

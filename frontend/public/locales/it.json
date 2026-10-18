@@ -435,5 +435,9 @@
   "{count} item": "{count} elemento",
   "{count} result": "{count} risultato",
   "Quick access": "Accesso rapido",
-  "Edit": "Modifica"
+  "Edit": "Modifica",
+  "Playback speed": "Velocità di riproduzione",
+  "Picture in picture": "Picture in picture",
+  "Save frame": "Salva fotogramma",
+  "This video format may not be supported by your browser. Download it to play it in another player.": "Il tuo browser potrebbe non supportare questo formato video. Scaricalo per riprodurlo in un altro player."
 }

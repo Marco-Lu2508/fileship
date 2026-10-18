@@ -435,3 +435,7 @@ This folder is empty|Dieser Ordner ist leer|Ce dossier est vide|Esta carpeta est
 {count} result|{count} Ergebnis|{count} résultat|{count} resultado|{count} risultato|{count} resultado
 Quick access|Schnellzugriff|Accès rapide|Acceso rápido|Accesso rapido|Acesso rápido
 Edit|Bearbeiten|Modifier|Editar|Modifica|Editar
+Playback speed|Wiedergabegeschwindigkeit|Vitesse de lecture|Velocidad de reproducción|Velocità di riproduzione|Velocidade de reprodução
+Picture in picture|Bild-in-Bild|Image dans l'image|Imagen en imagen|Picture in picture|Imagem em imagem
+Save frame|Bild speichern|Enregistrer l'image|Guardar fotograma|Salva fotogramma|Guardar fotograma
+This video format may not be supported by your browser. Download it to play it in another player.|Dieses Videoformat wird von deinem Browser womöglich nicht unterstützt. Lade es herunter und spiele es in einem anderen Player ab.|Ce format vidéo n'est peut-être pas pris en charge par votre navigateur. Téléchargez-le pour le lire dans un autre lecteur.|Es posible que tu navegador no admita este formato de vídeo. Descárgalo para reproducirlo en otro reproductor.|Il tuo browser potrebbe non supportare questo formato video. Scaricalo per riprodurlo in un altro player.|O seu navegador pode não suportar este formato de vídeo. Transfira-o para o reproduzir noutro leitor.
