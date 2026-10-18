@@ -45,6 +45,8 @@ test('formatting handles zero, gigabytes, terabytes and invalid values', () => {
   )
   assert.equal(fileKind({ name: 'photo.png', mime_type: '' }), 'image')
   assert.equal(fileKind({ name: 'clip.mp4', mime_type: '' }), 'video')
+  assert.equal(fileKind({ name: 'film.mkv', mime_type: '' }), 'video')
+  assert.equal(fileKind({ name: 'shot.mov', mime_type: '' }), 'video')
   assert.equal(fileKind({ name: 'song.mp3', mime_type: '' }), 'audio')
   assert.equal(fileKind({ name: 'main.go', mime_type: '' }), 'text')
   for (const name of ['', '  ', '..', 'a/b', 'a\\b', 'bad\nname'])

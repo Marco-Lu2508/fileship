@@ -33,8 +33,13 @@
   let animFrame = null
   let volume = 1
   let isMuted = false
+  let videoNaturalWidth = 0
+  let videoNaturalHeight = 0
+  let selectedAspect = 'auto'
+  let videoFit = 'contain'
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2]
+  const videoAspects = ['auto', '16:9', '9:16', '4:3', '1:1', '21:9']
 
   $: markdown =
     extension === 'md' && !rawMarkdown ? renderMarkdown(textContent) : ''
@@ -46,6 +51,10 @@
     currentTime = 0
     duration = 0
     mediaPaused = true
+    videoNaturalWidth = 0
+    videoNaturalHeight = 0
+    selectedAspect = 'auto'
+    videoFit = 'contain'
   }
   function navigate(offset) {
     if (
@@ -204,7 +213,52 @@
     ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(extension)
   $: isVideo =
     mime.startsWith('video/') ||
-    ['mp4', 'webm', 'ogv', 'mov', 'm4v'].includes(extension)
+    [
+      'mp4',
+      'webm',
+      'ogg',
+      'ogv',
+      'mov',
+      'm4v',
+      'mkv',
+      'avi',
+      'flv',
+      'wmv',
+      '3gp',
+      'mts',
+      'm2ts'
+    ].includes(extension)
+
+  function handleVideoMetadata() {
+    if (!videoEl) return
+    videoNaturalWidth = videoEl.videoWidth || 0
+    videoNaturalHeight = videoEl.videoHeight || 0
+    duration = videoEl.duration || 0
+  }
+
+  $: naturalRatio =
+    videoNaturalWidth > 0 && videoNaturalHeight > 0
+      ? videoNaturalWidth / videoNaturalHeight
+      : 16 / 9
+
+  $: activeRatio =
+    selectedAspect === '16:9'
+      ? 16 / 9
+      : selectedAspect === '9:16'
+        ? 9 / 16
+        : selectedAspect === '4:3'
+          ? 4 / 3
+          : selectedAspect === '1:1'
+            ? 1
+            : selectedAspect === '21:9'
+              ? 21 / 9
+              : naturalRatio
+
+  $: isVertical = activeRatio < 0.95
+  $: resolutionBadge =
+    videoNaturalWidth > 0 && videoNaturalHeight > 0
+      ? `${videoNaturalWidth}×${videoNaturalHeight}`
+      : ''
   $: isAudio =
     mime.startsWith('audio/') ||
     ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'flac'].includes(extension)
@@ -382,6 +436,16 @@
             <div class="preview-state">
               <Icon name="warning" size={32} />
               <p>{$i18n('Preview could not be loaded.')}</p>
+              {#if isVideo}
+                <p class="error-hint">
+                  {extension.toUpperCase()} Format wird vom Browser möglicherweise
+                  nicht nativ unterstützt.
+                </p>
+                <a href={downloadUrl} download={file.name} class="btn primary">
+                  <Icon name="download" size={13} />
+                  {$i18n('Download')}
+                </a>
+              {/if}
             </div>
           {:else if isImage}
             <img
@@ -392,16 +456,20 @@
             />
           {:else if isVideo}
             <div class="media-studio">
-              <div class="video-stage">
+              <div
+                class="video-stage"
+                class:vertical={isVertical}
+                style="--stage-aspect: {activeRatio};"
+              >
                 <video
                   bind:this={videoEl}
                   controls
                   playsinline
-                  width="960"
-                  height="540"
                   preload="metadata"
                   loop={loopMedia}
                   src={previewUrl}
+                  style="--video-fit: {videoFit};"
+                  onloadedmetadata={handleVideoMetadata}
                   onplay={() => {
                     mediaPaused = false
                     if (videoEl) {
@@ -439,6 +507,9 @@
                   <span class="time-pill">
                     {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
                   </span>
+                  {#if resolutionBadge}
+                    <span class="res-badge">{resolutionBadge}</span>
+                  {/if}
                   <div class="volume-control">
                     <button
                       class="volume-btn"
@@ -463,6 +534,30 @@
                   </div>
                 </div>
                 <div class="studio-right">
+                  <div
+                    class="speed-group"
+                    role="group"
+                    aria-label="Aspect ratio"
+                  >
+                    {#each videoAspects as r}
+                      <button
+                        class="speed-pill"
+                        class:active={selectedAspect === r}
+                        onclick={() => (selectedAspect = r)}
+                        title={`Format: ${r}`}>{r}</button
+                      >
+                    {/each}
+                  </div>
+                  <button
+                    class="btn"
+                    title={videoFit === 'contain'
+                      ? 'Fit to screen'
+                      : 'Fill screen'}
+                    onclick={() =>
+                      (videoFit = videoFit === 'contain' ? 'cover' : 'contain')}
+                  >
+                    {videoFit === 'contain' ? 'Fit' : 'Fill'}
+                  </button>
                   <div
                     class="speed-group"
                     role="group"
@@ -947,19 +1042,44 @@
   }
   .video-stage {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    max-width: 100%;
+    aspect-ratio: var(--stage-aspect, 16 / 9);
+    max-height: min(72vh, 650px);
     display: grid;
     place-items: center;
     background: #080b10;
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
+    margin: 0 auto;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+  .video-stage.vertical {
+    max-width: min(100%, 420px);
   }
   video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: var(--video-fit, contain);
     background: #080b10;
+  }
+  .res-badge {
+    font-size: 0.72rem;
+    color: var(--text2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .error-hint {
+    font-size: 0.85rem;
+    color: var(--text2);
+    max-width: 480px;
+    text-align: center;
+    margin: 0;
   }
   audio {
     width: 100%;

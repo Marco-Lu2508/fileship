@@ -254,6 +254,20 @@ func mimeTypeFromName(name string) string {
 		return "video/webm"
 	case ".mov":
 		return "video/quicktime"
+	case ".mkv":
+		return "video/x-matroska"
+	case ".avi":
+		return "video/x-msvideo"
+	case ".wmv":
+		return "video/x-ms-wmv"
+	case ".flv":
+		return "video/x-flv"
+	case ".ogv":
+		return "video/ogg"
+	case ".3gp":
+		return "video/3gpp"
+	case ".mts", ".m2ts":
+		return "video/mp2t"
 	case ".mp3":
 		return "audio/mpeg"
 	case ".ogg", ".oga":

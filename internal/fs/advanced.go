@@ -19,7 +19,7 @@ var ffmpegPath, _ = exec.LookPath("ffmpeg")
 func IsVideo(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
-	case ".mp4", ".m4v", ".webm", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".ogv":
+	case ".mp4", ".m4v", ".webm", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".ogv", ".3gp", ".mts", ".m2ts":
 		return true
 	}
 	return false

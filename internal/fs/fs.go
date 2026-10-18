@@ -251,6 +251,48 @@ func Move(root, srcRel, dstRel string) error {
 
 func mimeType(name string) string {
 	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".mov":
+		return "video/quicktime"
+	case ".mkv":
+		return "video/x-matroska"
+	case ".avi":
+		return "video/x-msvideo"
+	case ".wmv":
+		return "video/x-ms-wmv"
+	case ".flv":
+		return "video/x-flv"
+	case ".ogv", ".ogg":
+		return "video/ogg"
+	case ".3gp":
+		return "video/3gpp"
+	case ".mts", ".m2ts":
+		return "video/mp2t"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".flac":
+		return "audio/flac"
+	case ".m4a":
+		return "audio/mp4"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".pdf":
+		return "application/pdf"
+	}
 	if t := mime.TypeByExtension(ext); t != "" {
 		return t
 	}
