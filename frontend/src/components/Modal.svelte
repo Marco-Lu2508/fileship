@@ -60,6 +60,7 @@
   }
   dialog::backdrop {
     background: #0b101b99;
+    backdrop-filter: blur(3px);
     backdrop-filter: blur(6px);
     opacity: 0;
     transition:

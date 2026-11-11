@@ -1445,7 +1445,9 @@
     padding: 14px 28px;
     border-bottom: 1px solid var(--border);
     min-height: 65px;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(1.25);
+    -webkit-backdrop-filter: blur(14px) saturate(1.25);
   }
   .search-box {
     display: flex;
@@ -1533,25 +1535,40 @@
     gap: 8px;
     padding: 11px 16px;
     border: 1px solid var(--border);
-    border-radius: 7px;
+    border-radius: var(--radius);
     background: var(--surface);
     color: var(--text);
     cursor: pointer;
     font-weight: 500;
     font-size: 12px;
     white-space: nowrap;
+    transition:
+      background var(--transition),
+      border-color var(--transition),
+      box-shadow var(--transition),
+      transform 90ms ease;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn:active {
+    transform: translateY(1px);
   }
   .btn:hover {
     background: var(--row-hover);
     border-color: var(--text3);
   }
   .btn.primary {
-    background: var(--accent);
+    background: var(--accent-grad, var(--accent));
+    background-attachment: fixed;
     color: var(--on-accent);
-    border-color: var(--accent);
+    border-color: transparent;
+    box-shadow:
+      0 1px 3px color-mix(in srgb, var(--accent) 45%, transparent),
+      var(--shadow-sm);
   }
   .btn.primary:hover {
-    background: var(--accent-h);
+    background: var(--accent-grad, var(--accent-h));
+    border-color: transparent;
+    filter: brightness(1.05);
   }
   .icon-btn {
     display: grid;
@@ -1560,8 +1577,15 @@
     color: var(--text2);
     border: 0;
     background: none;
-    border-radius: 5px;
+    border-radius: var(--radius);
     cursor: pointer;
+    transition:
+      background var(--transition),
+      color var(--transition),
+      transform 90ms ease;
+  }
+  .icon-btn:active {
+    transform: scale(0.94);
   }
   .icon-btn:hover {
     background: var(--row-hover);

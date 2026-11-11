@@ -338,6 +338,15 @@
   .row {
     border-bottom: 1px solid var(--border2);
     transition: background 0.15s;
+    animation: row-in 0.22s ease both;
+  }
+  @keyframes row-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
   .row:last-child {
     border-bottom: 0;
@@ -371,10 +380,12 @@
     height: 32px;
     display: grid;
     place-items: center;
-    border-radius: 8px;
+    border-radius: 10px;
     flex-shrink: 0;
     color: var(--text2);
     background: var(--surface2);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border2);
   }
   .kind-folder {
     color: #a88737;

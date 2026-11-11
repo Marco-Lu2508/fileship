@@ -65,11 +65,13 @@
   :global(body) {
     font-family:
       'IBM Plex Sans', 'Segoe UI Variable', 'Segoe UI', Arial, sans-serif;
-    background: var(--bg);
+    background: var(--bg-grad, var(--bg));
+    background-attachment: fixed;
     color: var(--text);
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   :global(input[type='checkbox']) {
     accent-color: var(--accent);
@@ -113,9 +115,14 @@
   :global(a:hover) {
     text-decoration: underline;
   }
+  :global(::selection) {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: inherit;
+  }
   :global(:focus-visible) {
-    outline: 2px solid var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
     outline-offset: 2px;
+    border-radius: 4px;
   }
   :global(*:focus:not(:focus-visible)) {
     outline: none;
@@ -140,20 +147,34 @@
   /* ── Splash ─────────────────────────────────────── */
   .splash {
     min-height: 100vh;
-    background: var(--bg);
+    background: var(--bg-grad, var(--bg));
+    background-attachment: fixed;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--accent);
-    animation: pulse-splash 1.4s ease-in-out infinite;
   }
-  @keyframes pulse-splash {
-    0%,
-    100% {
-      opacity: 0.4;
+  .splash-icon {
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    border-radius: 50%;
+    color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow:
+      0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent),
+      0 0 0 16px color-mix(in srgb, var(--accent) 6%, transparent),
+      var(--shadow-lg);
+    animation: splash-in 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+  @keyframes splash-in {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
     }
-    50% {
+    to {
       opacity: 1;
+      transform: scale(1);
     }
   }
 </style>
