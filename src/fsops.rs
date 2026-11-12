@@ -296,39 +296,29 @@ pub fn go_dir(p: &str) -> String {
 
 pub fn dir_size(path: &str) -> FsResult<i64> {
     let mut size: i64 = 0;
-    fn rec(p: &Path, size: &mut i64) -> FsResult<()> {
-        for e in std::fs::read_dir(p)? {
-            let e = e?;
-            let md = e.metadata()?;
-            if md.is_dir() {
-                let _ = rec(&e.path(), size);
-            } else if md.file_type().is_file() {
-                *size += md.len() as i64;
-            }
-        }
-        Ok(())
-    }
-    // Go: Walk-Fehler propagieren (erster Fehler bricht ab). Rust: read_dir-Fehler propagieren.
-    fn rec_strict(p: &Path, size: &mut i64) -> FsResult<()> {
-        let entries = std::fs::read_dir(p)?;
-        for e in entries {
-            let e = e?;
-            // Walk nutzt Lstat — e.metadata() folgt Symlinks nicht? DirEntry::metadata folgt NICHT (Lstat-Semantik).
-            let md = e.metadata()?;
+    fn rec(p: &Path, size: &mut i64) {
+        // Unlesbare Subtrees (z. B. /sys/kernel/debug bei gemountetem
+        // Host-Root) werden uebersprungen statt die ganze Summe zu verwerfen.
+        // Go gab den Teil-Summe zurueck; Rust gab vorher 0 zurueck.
+        let Ok(entries) = std::fs::read_dir(p) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let Ok(md) = e.metadata() else {
+                continue;
+            };
             let ft = md.file_type();
             if ft.is_symlink() || !ft.is_file() && !ft.is_dir() {
                 continue;
             }
             if ft.is_dir() {
-                rec_strict(&e.path(), size)?;
+                rec(&e.path(), size);
             } else {
                 *size += md.len() as i64;
             }
         }
-        Ok(())
     }
-    let _ = rec;
-    rec_strict(Path::new(path), &mut size)?;
+    rec(Path::new(path), &mut size);
     Ok(size)
 }
 
