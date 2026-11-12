@@ -747,9 +747,69 @@ pub fn is_video(filename: &str) -> bool {
     )
 }
 
+pub fn ext_of(filename: &str) -> String {
+    filename.rsplit('.').next().unwrap_or("").to_lowercase()
+}
+
 pub fn is_image(filename: &str) -> bool {
-    let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
-    matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tiff")
+    let ext = ext_of(filename);
+    matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tiff" | "heic" | "heif" | "hif" | "avif")
+}
+
+pub fn is_pdf(filename: &str) -> bool {
+    ext_of(filename) == "pdf"
+}
+
+pub fn is_heic(filename: &str) -> bool {
+    matches!(ext_of(filename).as_str(), "heic" | "heif" | "hif")
+}
+
+/// Find an external tool in PATH (no shell toolchain assumed).
+pub fn find_binary(name: &str) -> Option<String> {
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    for dir in path_var.split(':') {
+        let cand = format!("{}/{}", dir, name);
+        if Path::new(&cand).is_file() {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// Convert a PDF (first page) or HEIC/HEIF image to a JPEG file that the
+/// image crate can decode. Returns the path of the temp file.
+fn convert_to_jpeg(abs: &str, rel: &str) -> FsResult<String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static CTR: AtomicU64 = AtomicU64::new(0);
+    let n = CTR.fetch_add(1, Ordering::Relaxed);
+    let tmp_base = std::env::temp_dir().join(format!("fileship_conv_{}_{}", std::process::id(), n));
+    let tmp_base = tmp_base.to_string_lossy().to_string();
+    let ok = if is_pdf(rel) {
+        // pdftoppm -png -singlefile renders page 1 -> "<base>.png"
+        let tool = find_binary("pdftoppm").ok_or_else(|| FsError("pdftoppm not available (install poppler-utils)".into()))?;
+        std::process::Command::new(&tool)
+            .args(["-png", "-singlefile", "-f", "1", "-l", "1", "-r", "110", abs, &tmp_base])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else if is_heic(rel) {
+        let tool = find_binary("heif-convert").ok_or_else(|| FsError("heif-convert not available (install libheif-examples)".into()))?;
+        std::process::Command::new(&tool)
+            .args([abs, &format!("{}.jpg", tmp_base)])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else {
+        return ferr("unsupported conversion");
+    };
+    if !ok {
+        return ferr("conversion failed");
+    }
+    Ok(if is_pdf(rel) { format!("{}.png", tmp_base) } else { format!("{}.jpg", tmp_base) })
 }
 
 fn ffmpeg_path() -> Option<String> {
@@ -807,7 +867,17 @@ pub fn thumbnail_exists(root: &str, thumb_dir: &str, rel: &str) -> Option<String
 
 pub fn generate_thumbnail(root: &str, rel: &str, thumb_dir: &str) -> FsResult<String> {
     let abs = resolve(root, rel)?;
-    let img = image::ImageReader::open(&abs).map_err(|e| FsError(e.to_string()))?.decode().map_err(|e| FsError(e.to_string()))?;
+    let conv_tmp: Option<String> = if is_pdf(rel) || is_heic(rel) {
+        Some(convert_to_jpeg(&abs, rel)?)
+    } else {
+        None
+    };
+    let src = conv_tmp.as_deref().unwrap_or(&abs);
+    let decoded = image::ImageReader::open(src).map_err(|e| FsError(e.to_string()))?.decode().map_err(|e| FsError(e.to_string()));
+    if let Some(tmp) = &conv_tmp {
+        let _ = std::fs::remove_file(tmp);
+    }
+    let img = decoded?;
     // imaging.Thumbnail(..., Lanczos) — Einpassen in 256x256, Aspect bleibt
     let (w, h) = (img.width(), img.height());
     let scale = (256f64 / w as f64).min(256f64 / h as f64).min(1.0);

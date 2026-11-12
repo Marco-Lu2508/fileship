@@ -1265,7 +1265,8 @@ pub fn soft_delete(state: &AppState, user_id: i64, root: &str, rel_path: &str) -
     let trash_name = format!("{}_{}", nanos, name);
     let trash_path = tdir.join(&trash_name);
     let size = if info.is_dir() { fsops::dir_size(&abs).unwrap_or(0) } else { info.len() as i64 };
-    state.db.trash_put(user_id, rel_path, &trash_name, &name, info.is_dir(), size, 30);
+    let retention_days: i64 = std::env::var("TRASH_RETENTION_DAYS").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+    state.db.trash_put(user_id, rel_path, &trash_name, &name, info.is_dir(), size, retention_days);
     if let Err(e) = fsops::transfer(&abs, &trash_path.to_string_lossy()) {
         if !trash_path.exists() {
             state.db.trash_delete(user_id, &trash_name);
@@ -1555,6 +1556,24 @@ async fn preview_file(State(state): State<AppState>, req: Request<Body>) -> Resp
     };
     if !md.file_type().is_file() {
         return err(StatusCode::BAD_REQUEST, "not a regular file");
+    }
+    if fsops::is_heic(&rel) {
+        match fsops::generate_thumbnail(&root, &rel, &thumb_dir(&state)) {
+            Ok(name) => {
+                let abs = format!("{}/{}", thumb_dir(&state), name);
+                return serve_file_response(
+                    &abs,
+                    None,
+                    &[
+                        ("content-type", "image/jpeg"),
+                        ("content-disposition", "inline"),
+                        ("x-content-type-options", "nosniff"),
+                    ],
+                    &req,
+                );
+            }
+            Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        }
     }
     if q.get("transcode").map(|v| v == "1").unwrap_or(false) && fsops::is_video(&rel) {
         if !fsops::ffmpeg_available() {
@@ -1879,7 +1898,7 @@ async fn thumbnail(State(state): State<AppState>, req: Request<Body>) -> Respons
         let mut res = serve_file_response(&abs, None, &[("cache-control", "private, max-age=3600")], &req);
         return res;
     }
-    if fsops::is_image(&rel) {
+    if fsops::is_image(&rel) || fsops::is_pdf(&rel) {
         match fsops::generate_thumbnail(&root, &rel, &tdir) {
             Ok(name) => {
                 let abs = format!("{}/{}", tdir, name);

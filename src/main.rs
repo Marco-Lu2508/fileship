@@ -6,6 +6,7 @@ mod config;
 mod db;
 mod fsops;
 mod handler;
+mod h3server;
 mod hub;
 mod middleware;
 mod model;
@@ -13,6 +14,7 @@ mod static_fs;
 mod webdav;
 
 use rand_core::Rng;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 fn env_or(key: &str, fallback: &str) -> String {
@@ -107,6 +109,8 @@ async fn main() {
     };
 
     let tls = cfg.tls_enabled();
+    let tls_cert = cfg.tls_cert.clone();
+    let tls_key = cfg.tls_key.clone();
     let state_for_ext = state.clone();
     let dav_state = state.clone();
     // IMPORTANT: .fallback() MUST be registered before the .layer() calls —
@@ -143,11 +147,33 @@ async fn main() {
         eprintln!("pruned {} audit entries older than {} days", pruned, retention_days);
     }
 
+    // Purge expired trash entries (all users) at startup so the trash
+    // directory does not grow forever for inactive users.
+    let expired_trash = database.purge_all_expired_trash();
+    if !expired_trash.is_empty() {
+        let tdir = db::trash_dir(&cfg.db_path);
+        for name in &expired_trash {
+            let _ = std::fs::remove_dir_all(tdir.join(name));
+            let _ = std::fs::remove_file(tdir.join(name));
+        }
+        eprintln!("purged {} expired trash entries", expired_trash.len());
+    }
+
     let addr = format!("0.0.0.0:{}", cfg.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap_or_else(|e| {
         eprintln!("bind {}: {}", addr, e);
         std::process::exit(1);
     });
+
+    // HTTP/3 on UDP, same port (TLS deployments only).
+    if tls {
+        let h3_addr: SocketAddr = format!("0.0.0.0:{}", cfg.port).parse().unwrap();
+        if let Err(e) = h3server::serve_http3(h3_addr, &tls_cert, &tls_key, app.clone()) {
+            eprintln!("HTTP/3 disabled: {}", e);
+        } else {
+            eprintln!("   + HTTP/3 enabled (UDP/{})", cfg.port);
+        }
+    }
 
     // HTTP/1.1 + HTTP/2 on the same port (h2c prior-knowledge / upgrade, and
     // ALPN "h2"/"http/1.1" for TLS simultaneously) via hyper's auto builder.

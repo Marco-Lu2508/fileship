@@ -12,10 +12,12 @@ A self-hosted file browser + manager with WebDAV, file sharing, favorites, HTTP 
 
 - 📁 Browse, upload (chunked or multipart), download, rename, copy, move, delete
 - 🎬 Video streaming with HTTP Range (MP4/MKV/WebM) + ffmpeg transcoding
-- 🖼️ Image previews & thumbnails (Lanczos)
+- 🖼️ Image previews & thumbnails (Lanczos), incl. PDF first-page and HEIC/HEIF (via poppler-utils / libheif)
 - 📦 Create/extract archives (ZIP, TAR, TAR.GZ)
 - 🔗 Public share links with optional password and expiry
-- ⭐ Favorites, 🗑️ Trash with automatic expiry
+- ⭐ Favorites, 🗑️ Trash with automatic expiry (`TRASH_RETENTION_DAYS`, default 30)
+- 📱 PWA: installable, offline app shell (service worker caches assets only, never the API)
+- 🌐 HTTP/1.1 + HTTP/2 + HTTP/3 on one port (h3 when TLS is enabled)
 - 🔌 WebDAV support at `/webdav`
 - 🤖 Agent filesystem with WebSocket agent protocol
 

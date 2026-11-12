@@ -19,7 +19,7 @@ RUN cargo test --release --all-targets && \
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates ffmpeg libsqlite3-0 \
+    ca-certificates ffmpeg libsqlite3-0 poppler-utils libheif-examples \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/target/release/fileship /usr/local/bin/fileship
@@ -29,7 +29,7 @@ ENV PORT=8080 \
     ROOT_PATH=/data
 
 VOLUME ["/data"]
-EXPOSE 8080
+EXPOSE 8080/tcp 8080/udp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/${PORT:-8080} && printf "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && head -1 <&3 | grep -q " 200 "'
 ENTRYPOINT ["fileship"]

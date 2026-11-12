@@ -734,6 +734,29 @@ impl Db {
         expired
     }
 
+    /// Delete expired trash rows for ALL users. Returns the trash names
+    /// of the purged entries so the caller can remove the files on disk.
+    pub fn purge_all_expired_trash(&self) -> Vec<String> {
+        let now = Local::now();
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare_cached("SELECT trash_name, expires_at FROM trash")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .unwrap();
+        let expired: Vec<String> = rows
+            .filter_map(|r| r.ok())
+            .filter(|(_, exp)| parse_db_time(exp).map(|t| t < now).unwrap_or(false))
+            .map(|(n, _)| n)
+            .collect();
+        drop(stmt);
+        for n in &expired {
+            let _ = conn.execute("DELETE FROM trash WHERE trash_name = ?", params![n]);
+        }
+        expired
+    }
+
     // ── Sources ────────────────────────────────────────
 
     pub fn list_sources(&self, user_id: i64) -> Vec<UserSource> {

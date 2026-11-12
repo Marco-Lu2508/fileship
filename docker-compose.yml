@@ -3,7 +3,8 @@ services:
     image: ghcr.io/marco-lu2508/fileship:latest
     pull_policy: always
     ports:
-      - "8080:8080"
+      - "8080:8080/tcp"   # HTTP/1.1 + HTTP/2 (and HTTPS if TLS is on)
+      - "8080:8080/udp"   # HTTP/3 (only when TLS is enabled)
     volumes:
       - fileship-data:/data
       - fileship-db:/app
@@ -14,6 +15,10 @@ services:
       - DB_PATH=/app/fileship.db
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-1024}
+      - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-90}
+      - TRASH_RETENTION_DAYS=${TRASH_RETENTION_DAYS:-30}
+      - TLS_CERT=${TLS_CERT:-}
+      - TLS_KEY=${TLS_KEY:-}
     restart: unless-stopped
 
 volumes:
