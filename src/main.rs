@@ -12,6 +12,7 @@ mod model;
 mod static_fs;
 mod webdav;
 
+use rand_core::Rng;
 use std::sync::Arc;
 
 fn env_or(key: &str, fallback: &str) -> String {
@@ -76,7 +77,7 @@ async fn main() {
     let admin_pass = env_or("ADMIN_PASSWORD", "");
     let admin_pass = if admin_pass.is_empty() {
         let mut b = [0u8; 12];
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut b);
+        rand::rng().fill_bytes( &mut b);
         let generated = hex::encode(b);
         eprintln!("⚠️  ADMIN_PASSWORD not set — generated: {} (set ADMIN_PASSWORD env var!)", generated);
         generated

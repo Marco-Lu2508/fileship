@@ -2,6 +2,7 @@
 //! Eine Connection + Mutex (SQLite serialisiert ohnehin), WAL, FK an.
 //! DATETIME als Go-Format gespeichert — DBs sind mit dem Original austauschbar.
 
+use rand_core::Rng;
 use crate::model::*;
 use chrono::{DateTime, Local};
 use rusqlite::{params, Connection};
@@ -397,7 +398,7 @@ impl Db {
         allow_edit: bool,
     ) -> Result<String, rusqlite::Error> {
         let mut raw = [0u8; 16];
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+        rand::rng().fill_bytes( &mut raw);
         let token = hex::encode(raw);
         let exp = expires_at.as_ref().map(fmt_db_time);
         self.exec(
@@ -481,7 +482,7 @@ impl Db {
         expires_at: &Option<DateTime<Local>>,
     ) -> Result<(String, ApiToken), rusqlite::Error> {
         let mut raw = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+        rand::rng().fill_bytes( &mut raw);
         let plain = format!("fsk_{}", hex::encode(raw));
         let prefix = format!("{}…", &plain[..12]);
         let hash = sha256_hex(&plain);
@@ -782,7 +783,7 @@ impl Db {
     pub fn create_agent_device(&self, user_id: i64, name: &str, root_path: &str) -> Result<AgentDevice, rusqlite::Error> {
         let root_path = if root_path.is_empty() { "/" } else { root_path };
         let mut raw = [0u8; 24];
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+        rand::rng().fill_bytes( &mut raw);
         let plain = format!("fsa_{}", hex::encode(raw));
         let prefix = plain[..12].to_string();
         let hash = sha256_hex(&plain);

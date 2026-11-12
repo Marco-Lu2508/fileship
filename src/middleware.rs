@@ -2,6 +2,7 @@
 //! Rate-Limit (Token-Bucket wie Go x/time/rate), CSRF (Double-Submit),
 //! Security-Header, Trusted-Proxies / Client-IP.
 
+use rand_core::Rng;
 use crate::auth;
 use crate::handler::AppState;
 use axum::body::Body;
@@ -381,7 +382,7 @@ const APP_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' '
 
 fn new_csrf_token() -> String {
     let mut b = [0u8; 16];
-    rand::RngCore::fill_bytes(&mut rand::rng(), &mut b);
+    rand::rng().fill_bytes( &mut b);
     hex::encode(b)
 }
 

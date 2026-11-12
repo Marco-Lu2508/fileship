@@ -1,6 +1,7 @@
 //! Filesystem-Operationen — 1:1 Port von internal/fs (Go).
 //! Pfad-Sicherheit: Resolve() folgt denselben Regeln (Absolutpfad, Symlink-Verbot, Präfix-Check).
 
+use rand_core::Rng;
 use crate::model::{FileInfo, ListOptions, ListResult};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -412,7 +413,7 @@ pub fn save_upload<R: Read>(root: &str, rel: &str, reader: &mut R) -> FsResult<(
 
 fn rand_hex(bytes: usize) -> String {
     let mut b = vec![0u8; bytes];
-    rand::RngCore::fill_bytes(&mut rand::rng(), &mut b);
+    rand::rng().fill_bytes( &mut b);
     hex::encode(b)
 }
 

@@ -4,7 +4,7 @@
 //! Wir signieren/validieren exakt dasselbe Format, damit Tokens austauschbar sind.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use rand::RngCore;
+use rand_core::Rng;
 use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

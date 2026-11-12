@@ -1,90 +1,164 @@
-# Fileship
+# 🚢 Fileship
 
-Dateimanager fürs Homelab — als **eine einzige Rust-Binary**: Web-Backend, WebDAV, Agent-Server und das eingebettete Svelte-Frontend. Keine Go-Abhängigkeiten, keine externe Runtime außer `ffmpeg` (Transcoding).
+[![Rust](https://img.shields.io/badge/Rust-1.90%2B-dea584)](https://rust-lang.org)
+[![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00)](https://svelte.dev)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED)](https://www.docker.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)](https://github.com/Marco-Lu2508/fileship)
 
-## Features
+A self-hosted file browser + manager with WebDAV, file sharing, favorites, HTTP range downloads and a modern Svelte 5 UI. Powered by a Rust backend (Axum/Tokio) — built for maximum speed: LTO release profile, gzip + Brotli compression, and ~107 KB (gzip) initial frontend load.
 
-- **Backend in Rust** — Axum 0.8 auf Tokio, SQLite (rusqlite, WAL), JWT/bcrypt/TOTP
-- **69/69 Routen-Parität** zum alten Go-Backend (Auth, Dateien, Shares, Trash, Favoriten, Quellen/Agenten, Audit, Stats, Berechtigungen)
-- **Svelte-5-Frontend**, eingebettet per `rust-embed` — ein Binary, keine Static-Server
-- **WebDAV** (`/webdav`, Basic- oder Bearer-Auth), **Agent-Protocol** (WebSocket JSON-RPC), **Chunk-Upload**, **Live-Transcoding via ffmpeg**
-- **2FA (TOTP)** mit Backup-Codes, API-Tokens, Rate-Limiting, CSRF-Double-Submit, Security-Headers
-- **Themes**: Light, Ocean, Violet, Dark, Nord, Solarized, Gruvbox
-- **i18n**: Deutsch, Englisch, Französisch, Spanisch, Italienisch, Portugiesisch
+## ✨ Key Features
 
-## Performance
+- 📁 Browse, upload (chunked or multipart), download, rename, copy, move, delete
+- 🎬 Video streaming with HTTP Range (MP4/MKV/WebM) + ffmpeg transcoding
+- 🖼️ Image previews & thumbnails (Lanczos)
+- 📦 Create/extract archives (ZIP, TAR, TAR.GZ)
+- 🔗 Public share links with optional password and expiry
+- ⭐ Favorites, 🗑️ Trash with automatic expiry
+- 🔌 WebDAV support at `/webdav`
+- 🤖 Agent filesystem with WebSocket agent protocol
 
-- **Release-Profil**: `opt-level=3`, `lto="fat"`, `codegen-units=1`, `panic="abort"`, `strip=true`
-- **Spawn-blocking** für Filesystem-Listen/Suchen/Index — der Async-Runtime bleibt frei
-- **Statement-Caching** in SQLite (`prepare_cached`), WAL + `synchronous=NORMAL` + 64 MB Page-Cache
-- **Streaming-Hash** (Checksummen) und Streaming-Downloads — keine Datei liegt komplett im RAM
-- **Compression**: gzip + Brotli auf den Static-Assets (API/Uploads bleiben unkomprimiert)
-- **Cache**: hashbasierte Assets mit `immutable`, `index.html` mit `no-cache`
-- **Frontend**: 230 KB Initial-Bundle + Vendor-Chunk (separat cachebar), Admin/Preview/Settings/Editor werden lazy geladen (~67 KB nur auf Bedarf)
+## 🌐 Live Demo
 
-## Bauen
+> Deployed 24/7 on a homelab server — accessible via Tailscale/WireGuard VPN.
 
-```bash
-# Frontend bauen (generiert frontend/dist, wird ins Binary eingebettet)
-cd frontend && npm ci && npm run build
+**No public demo instance** — this is a self-hosted application.
 
-# Rust-Backend bauen
-cargo build --release
-./target/release/fileship
-
-# Tests
-cargo test --release --all-targets
-cd frontend && npm test && npx svelte-check
-```
-
-## Docker
-
-```bash
-docker build -t fileship .
-docker run --rm -p 8080:8080 \
-  -v fileship-data:/data \
-  -e JWT_SECRET=dein-geheimnis \
-  -e ADMIN_PASSWORD=dein-passwort \
-  fileship
-```
-
-Oder mit Compose (zieht das Image aus `ghcr.io/marco-lu2508/fileship:latest`, das die CI bei jedem Push auf `main` baut):
+## 🐳 Docker
 
 ```bash
 docker compose up -d
 ```
 
-## Konfiguration (Env-Variablen)
+Open http://localhost:8080
 
-| Variable | Default | Beschreibung |
+## ⚙️ Configuration
+
+| Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8080` | HTTP-Port |
-| `ROOT_PATH` | `./data` | Dateien-Root |
-| `DB_PATH` | `./fileship.db` | SQLite-Datei |
-| `JWT_SECRET` | *ephemeral* | JWT-Signing-Key — **unbedingt setzen**, sonst sind Sessions nach jedem Neustart weg |
-| `ADMIN_PASSWORD` | — | Initial-Admin (`admin`), wird nur beim allerersten Start verwendet |
-| `MAX_UPLOAD_MB` | `1024` | Max. Upload-Größe |
-| `TLS_CERT` / `TLS_KEY` | — | Optionales TLS (rustls) |
+| `PORT` | `8080` | HTTP port |
+| `ROOT_PATH` | `./data` | Filesystem root shown in the UI |
+| `DB_PATH` | `./fileship.db` | SQLite database (auto-migrated) |
+| `JWT_SECRET` | *(ephemeral)* | JWT signing key — **set this**, sessions are lost on restart otherwise |
+| `MAX_UPLOAD_MB` | `1024` | Max upload size |
+| `ADMIN_PASSWORD` | — | Initial admin password (first start only) |
+| `TLS_CERT` / `TLS_KEY` | — | Enable HTTPS when set (rustls) |
 
-## Agent-Modus
+## 📡 API
+
+- `POST /api/auth/login` · `/api/auth/refresh` · `/api/auth/2fa/verify` — auth + TOTP 2FA
+- `GET/POST/DELETE /api/files/*` — list, upload, download, mkdir, move, copy, delete, info, search
+- `POST /api/files/upload/chunk` — chunked upload (16 MB chunks)
+- `/api/shares/*`, `/api/trash/*`, `/api/favorites/*`, `/api/agents/*`, `/api/audit/*`, `/api/stats/*` — shares, trash, favorites, agents, audit, stats
+- `PROPFIND /webdav/` — WebDAV
+- `GET /ws` — live updates (JWT in the upgrade token)
+
+Auth: Bearer JWT (`Authorization: Bearer <token>`), API tokens for WebDAV/scripts.
+
+All 69 API/WebDAV routes of the previous Go backend are implemented in Rust (route parity verified against the original route table).
+
+## 🤖 AI Agents
+
+Fileship ships with an agent filesystem: external agents connect via WebSocket (`/api/agent/ws`) and expose virtual filesystems. JSON-RPC over WS, binary payloads base64-encoded inline.
 
 ```bash
-./fileship --agent --server ws://host:8080/api/agent/ws --token <token>
-# oder: FILESHIP_AGENT=1
+# Agent mode
+fileship --agent --server ws://host:8080/api/agent/ws --token <token>
+# or: FILESHIP_AGENT=1
 ```
 
-Der Agent registriert sich am Server und kann z. B. Transcodierung/WebDAV auf Remote-Hosts bereitstellen.
+The agent binary is the same executable — it registers with the server and can e.g. provide transcoding/WebDAV on remote hosts.
 
-## API (Auswahl)
+## 🎨 Design & Themes
 
-- `POST /api/auth/login` · `/api/auth/refresh` · `/api/auth/2fa/verify`
-- `GET/POST/DELETE /api/files/*` (List, Upload, Download, Mkdir, Move, Copy, Delete, Info, Search)
-- `POST /api/files/upload/chunk` (Chunk-Upload, 16 MB-Chunks)
-- `/api/shares/*`, `/api/trash/*`, `/api/favorites/*`, `/api/agents/*`, `/api/audit/*`, `/api/stats/*`
-- `/s/{token}` — öffentliche Share-Seite
-- `/webdav/*` — WebDAV
-- `/ws` — Live-Updates (JWT im Upgrade-Token)
+7 built-in themes: Light, Ocean, Violet, Dark, Nord, Solarized, Gruvbox — glass topbar, gradient buttons, row fade-in animations, blurred modal backdrops. i18n in 6 languages (DE/EN/FR/ES/IT/PT).
 
-## Lizenz / Status
+## ⚡ Performance
 
-Homelab-Self-Hosting-Projekt. Backend komplett in Rust (Code-Coverage der Routen: 69/69 gegen das Go-Original verifiziert).
+### Backend (Rust)
+- **Release profile**: `opt-level=3`, `lto="fat"`, `codegen-units=1`, `panic="abort"`, stripped binary (~12 MB)
+- **Compression**: gzip + Brotli on static assets (API/downloads stay uncompressed)
+- **Async I/O**: `spawn_blocking` for listing/search/indexing; streaming SHA/MD5 hashing (1 MB buffers — no full-file RAM)
+- **DB**: rusqlite WAL mode, `prepare_cached` statement cache, `synchronous=NORMAL`, 64 MB page cache
+- **JWT**: hand-rolled HS256 (no crypto-stack overhead), 15-min access tokens
+
+### Frontend (Svelte 5 + Vite 8)
+- **Lazy components**: Admin, Preview, Settings, Editor load on demand
+- **Code splitting**: separate vendor/shared chunks with immutable cache headers
+- **~107 KB gzip** initial load (Brotli even less — down from ~130 KB of a single bundle)
+- **es2022 target**, manual chunks, svelte-check clean
+
+## 🔒 Security
+
+- bcrypt password hashing
+- JWT auth with 15-minute access tokens + 7-day refresh tokens
+- TOTP two-factor auth with backup codes
+- CSRF protection (double-submit cookie)
+- Rate limiting (12/min login, 5/min 2FA)
+- Path traversal blocked, symlink escapes rejected
+- Security headers (nosniff, sameorigin, XSS filters)
+
+## 🏗️ Building from Source
+
+### Backend (Rust, MSRV 1.89)
+
+```bash
+cargo build --release
+./target/release/fileship
+```
+
+The built binary is fully self-contained (frontend embedded via rust-embed).
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run build    # output → frontend/dist (embedded into the Rust binary)
+npm test         # 43 tests (node --test + jsdom)
+```
+
+### Rebuild everything
+
+```bash
+make build       # frontend build + cargo --release
+```
+
+### Run tests
+
+```bash
+cargo test --release
+```
+
+## 📁 Project Structure
+
+```
+src/               Rust backend (axum/tokio)
+frontend/          Svelte 5 UI (sources)
+frontend/dist/     Built frontend — embedded into the binary
+Dockerfile         Multi-stage build (Rust 1.90 + Node 22)
+docker-compose.yml Deployment
+```
+
+## 🛠️ Built With
+
+- **Backend**: Axum 0.8, Tokio, rusqlite, rustls, serde, tower-http
+- **Frontend**: Svelte 5, Vite 8
+- **Auth**: JWT HS256, bcrypt, TOTP (RFC 6238)
+- **Streaming**: ffmpeg/ffprobe for video transcoding
+
+## 📚 Documentation
+
+- [File Browser Workflows](docs/filebrowser-workflows.md)
+- [Interface Design](docs/interface-design.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run `cargo test` (Rust) and `npm test` (frontend) before submitting
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE) for details.

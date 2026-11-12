@@ -1,6 +1,6 @@
 //! Config — identische Env-Variablen & Defaults wie Go.
 
-use rand::RngCore;
+use rand_core::Rng;
 
 #[derive(Debug, Clone)]
 pub struct Config {

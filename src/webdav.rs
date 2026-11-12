@@ -1,6 +1,7 @@
 //! WebDAV — Port von internal/handler/webdav.go (x/net/webdav-Verhalten).
 //! Auth: Bearer-JWT oder Basic-Auth (2FA nur Bearer). Pfad-Validierung wie safeWebDAVFileSystem.
 
+use rand_core::Rng;
 use crate::fsops;
 use crate::handler::AppState;
 use crate::middleware::err_resp;
@@ -488,7 +489,7 @@ fn dav_move_copy(root: &str, name: &str, req: &Request<Body>, is_move: bool) -> 
 
 fn dav_lock() -> Response {
     let mut raw = [0u8; 16];
-    rand::RngCore::fill_bytes(&mut rand::rng(), &mut raw);
+    rand::rng().fill_bytes( &mut raw);
     let token = hex::encode(raw);
     let body = format!(
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<prop xmlns=\"DAV:\">\n<lockdiscovery>\n<activelock>\n<locktype><write/></locktype>\n<lockscope><exclusive/></lockscope>\n<depth>infinity</depth>\n<owner>fileship</owner>\n<timeout>Second-600</timeout>\n<locktoken><href>opaquelocktoken:{}</href></locktoken>\n<lockroot><href>/webdav/</href></lockroot>\n</activelock>\n</lockdiscovery>\n</prop>\n",
