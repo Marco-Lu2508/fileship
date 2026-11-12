@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/yourname/fileship/internal/auth"
@@ -53,6 +54,24 @@ func TestHubBroadcastsConcurrentlyToAuthenticatedClients(t *testing.T) {
 		t.Fatalf("dial failed: %v", err)
 	}
 	defer conn.Close()
+
+	// Dial returns as soon as the 101 response is sent, but the server
+	// registers the client right after the upgrade. Wait until the hub
+	// actually has our client, otherwise early broadcasts are dropped
+	// and the test hangs waiting for events that never arrive.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		hub.mu.RLock()
+		n := len(hub.clients)
+		hub.mu.RUnlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("client never registered with hub")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 
 	const count = 20
 	var wg sync.WaitGroup
