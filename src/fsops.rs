@@ -364,7 +364,21 @@ pub fn is_pseudo_fs(path: &Path) -> bool {
         const CGROUP: i64 = 0x27e0eb;
         const CGROUP2: i64 = 0x6367_7270;
         const DEBUGFS: i64 = 0x6462_6773;
-        matches!(st.f_type as i64, PROC | SYS | DEVTMPFS | CGROUP | CGROUP2 | DEBUGFS)
+        // The rest are kernel-internal filesystems that can never hold
+        // user data; counting them would only add noise.
+        const CONFIGFS: i64 = 0x7375_5e65;
+        const TRACEFS: i64 = 0x7472_6163;
+        const FUSECTL: i64 = 0x6573_7466;
+        const MQUEUE: i64 = 0x1980_0202;
+        const HUGETLBFS: i64 = 0x9584_58f6;
+        const BPF_FS: i64 = 0xcafe_4a11;
+        const SECURITYFS: i64 = 0x7367_9b01;
+        const EFIVARFS: i64 = 0xde5e_81e5;
+        matches!(
+            st.f_type as i64,
+            PROC | SYS | DEVTMPFS | CGROUP | CGROUP2 | DEBUGFS | CONFIGFS | TRACEFS | FUSECTL
+                | MQUEUE | HUGETLBFS | BPF_FS | SECURITYFS | EFIVARFS
+        )
     }
 }
 

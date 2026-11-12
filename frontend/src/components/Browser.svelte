@@ -911,9 +911,9 @@
             <button
               class="icon-btn"
               class:active={showPseudo}
-              aria-label={$i18n('Show system folders (/proc, /sys, /dev)')}
+              aria-label={$i18n('Show system folders (/proc, /sys, /dev, /run)')}
               aria-pressed={showPseudo}
-              title={$i18n('Show system folders (/proc, /sys, /dev)')}
+              title={$i18n('Show system folders (/proc, /sys, /dev, /run)')}
               onclick={togglePseudo}><Icon name="eye" size={17} /></button
             >
           </div>

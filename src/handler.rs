@@ -649,6 +649,14 @@ async fn list_files(State(state): State<AppState>, auth: Auth, req: Request<Body
             if !f.is_dir {
                 return true;
             }
+            // Bind-mounted host roots (/data -> /) expose system mounts
+            // whose fstype statfs cannot see in the container, so also
+            // hide the four classic FHS system locations at depth 1 by
+            // name — they are virtually never data (toggle to show).
+            let rel = f.path.trim_start_matches('/');
+            if !rel.contains('/') && matches!(rel, "proc" | "sys" | "dev" | "run") {
+                return false;
+            }
             match fsops::resolve(&root_abs, &f.path) {
                 Ok(abs) => !fsops::is_pseudo_fs(std::path::Path::new(&abs)),
                 Err(_) => true,
