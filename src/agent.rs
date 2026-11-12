@@ -1,5 +1,5 @@
 //! Agent — Server-Hub + Client (Remote Device Agent).
-//! Protokoll wie Go: JSON-RPC über WebSocket, Message{type,action,params,data(base64),meta,error,status}.
+//! Protocol as in Go: JSON-RPC over WebSocket, Message{type,action,params,data(base64),meta,error,status}.
 
 use crate::fsops;
 use crate::model::{ListOptions};
@@ -242,7 +242,7 @@ impl Hub {
     }
 }
 
-// ── Client (läuft auf den Remote-Geräten) ───────────────
+// ── Client (runs on the remote devices) ───────────────
 
 pub fn ws_url(server_url: &str) -> String {
     let u = server_url.trim().trim_end_matches('/');
@@ -362,7 +362,7 @@ async fn connect_and_serve(endpoint: &str, token: &str, root_abs: &str) -> Resul
         }
     });
 
-    // Read-Loop läuft hier; Antworten gehen über tx
+    // Read loop runs here; responses go via tx
     let tx2 = tx.clone();
     let root_owned = root_abs.to_string();
     while let Some(res) = stream.next().await {

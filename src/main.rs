@@ -109,11 +109,11 @@ async fn main() {
     let tls = cfg.tls_enabled();
     let state_for_ext = state.clone();
     let dav_state = state.clone();
-    // WICHTIG: .fallback() MUSS vor den .layer()-Aufrufen stehen —
-    // axum wendet layer() nur auf bereits registrierte Routen (+ Fallback) an.
+    // IMPORTANT: .fallback() MUST be registered before the .layer() calls —
+    // axum applies layer() only to already-registered routes (+ fallback).
     //
-    // Compression nur auf den Static-Fallback (SPA/WebDAV): API-JSON und
-    // vor allem File-Downloads (potenziell GB-groß, evtl. schon komprimiert)
+    // Compression only on the static fallback (SPA/WebDAV): API JSON and
+    // especially file downloads (potentially GB-sized, possibly already compressed)
     // bleiben unkomprimiert.
     let static_app = axum::Router::<()>::new()
         .fallback(move |req: axum::http::Request<axum::body::Body>| {
@@ -180,7 +180,7 @@ async fn main() {
     }
 }
 
-/// axum::serve-kompatibler TLS-Listener (tokio-rustls 0.26: LazyConfigAcceptor nicht mehr direkt).
+/// axum::serve-compatible TLS listener (tokio-rustls 0.26: no more LazyConfigAcceptor).
 struct TlsListener {
     inner: tokio::net::TcpListener,
     acceptor: tokio_rustls::TlsAcceptor,

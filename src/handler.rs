@@ -524,7 +524,7 @@ async fn list_files(State(state): State<AppState>, auth: Auth, req: Request<Body
     let perms = if auth.is_admin() { Vec::new() } else { state.db.list_path_permissions(auth.user_id()) };
     let root = user_root(&state, &req);
     let starred = state.db.favorite_path_set(auth.user_id());
-    // Perm-Prefix VOR dem spawn_blocking extrahieren (Request kann nicht übergeben werden)
+    // Extract perm prefix BEFORE spawn_blocking (request can't be moved)
     let prefix = source_rel_path(&state, &req);
     let is_admin = auth.is_admin();
     let root_owned = root.clone();
@@ -684,7 +684,7 @@ fn image_dimensions(abs: &str) -> Result<(u32, u32), ()> {
 }
 
 fn checksum_file(abs: &str, algo: &str) -> Result<String, ()> {
-    // Streaming-Hash — keine ganze Datei im RAM (große Dateien!)
+    // Streaming hash — no full file in RAM (large files!)
     use std::io::Read as _;
     let mut file = std::fs::File::open(abs).map_err(|_| ())?;
     let mut buf = vec![0u8; 1 << 20];
@@ -776,8 +776,8 @@ async fn read_multipart(req: Request<Body>, max_total: i64, max_files: usize) ->
     let mut files: Vec<SpooledFile> = Vec::new();
     let mut total: i64 = 0;
     // multipart-Parsing via axum::extract::Multipart ist async; hier hand-parsen:
-    // (axum Multipart erlaubt kein Streaming auf File — wir parsen aus dem Puffer,
-    //  abschnittsweise, aber spoolen jeden File-Part in eine Temp-Datei.)
+    // (axum multipart doesn't allow streaming to file — we parse from the buffer,
+    //  in chunks, but spool each file part to a temp file.)
     let mut mp = MultipartParser::new(&body, &boundary);
     loop {
         let part = match mp.next_part() {
@@ -841,11 +841,11 @@ impl<'a> MultipartParser<'a> {
         // Part-Anfang finden
         let start = find_subslice(&self.body[self.pos..], &delim).ok_or(())? + self.pos;
         let mut p = start + delim.len();
-        // Prüfe ob Abschluss "--"
+        // Check whether the terminator is "--"
         if p + 1 < self.body.len() && &self.body[p..p + 2] == b"--" {
             return Ok(None);
         }
-        // CRLF überspringen
+        // Skip CRLF
         if p + 1 < self.body.len() && &self.body[p..p + 2] == b"\r\n" {
             p += 2;
         }
@@ -875,7 +875,7 @@ impl<'a> MultipartParser<'a> {
         end_delim.extend_from_slice(&self.boundary);
         let data_end = find_subslice(&self.body[data_start..], &end_delim).ok_or(())? + data_start;
         let data = self.body[data_start..data_end].to_vec();
-        self.pos = data_end + 2; // zeige auf --boundary
+        self.pos = data_end + 2; // points at --boundary
         Ok(Some(MpPart { name, filename, data }))
     }
 }
@@ -995,10 +995,10 @@ async fn upload_file(State(state): State<AppState>, auth: Auth, req: Request<Bod
     empty(StatusCode::CREATED)
 }
 
-/// perm_path ohne Request (für Multipart-Handler, die den Original-Request schon konsumiert haben).
-/// X-Source-ID wurde aus Headern nicht übergeben — Go nutzt r.Header; hier best effort ohne Source
+/// perm_path without the request (for multipart handlers that already consumed it).
+/// X-Source-ID wasn't passed through headers — Go uses r.Header; here best effort without source
 /// (Uploads mit aktiver Source sind im Go ebenfalls durch den Header erreichbar; wir haben den
-/// Original-Request in lesbar multipart nicht mehr. Vereinfachung akzeptiert.)
+/// original request once we are in multipart. Accepted simplification.)
 fn perm_path_rooted(_state: &AppState, rel: &str) -> String {
     match fsops::clean_relative_path(rel) {
         Ok(c) => c,
@@ -1157,7 +1157,7 @@ async fn delete_file(State(state): State<AppState>, auth: Auth, req: Request<Bod
         if !crate::db::path_permission_allowed(&perms, &target_perm, "delete") {
             return err(StatusCode::FORBIDDEN, &format!("permission denied for path: {}", target_perm));
         }
-        // Alle Kinder bei Dirs prüfen
+        // Check all children for dirs
         if std::fs::metadata(&abs).map(|m| m.is_dir()).unwrap_or(false) {
             let root_abs = fsops::resolve(&root, "").unwrap_or_default();
             for entry in walk_all(&abs) {
@@ -2288,7 +2288,7 @@ async fn trash_restore(State(state): State<AppState>, auth: Auth, AxPath(name): 
         }
     }
     if !item.is_dir && !allowed_types.is_empty() && !fsops::type_allowed(&fsops::go_dir(&restore_rel), &allowed_types) {
-        // Go prüft TypeAllowed auf Base — vereinfacht: Name prüfen
+        // Go checks TypeAllowed on base — simplified: check name
         if !fsops::type_allowed(&item.name, &allowed_types) {
             return err(StatusCode::FORBIDDEN, "file type not allowed");
         }
@@ -2814,7 +2814,7 @@ async fn public_share(State(state): State<AppState>, AxPath(token): AxPath<Strin
     let q = query_map(&req);
     let is_post = req.method() == axum::http::Method::POST;
     let mut pw = q.get("pw").cloned().unwrap_or_default();
-    // Request-Split: req_view für Header/Query/Extensions nach Body-Konsum verfügbar halten
+    // Request split: keep req_view for headers/query/extensions after body consumption
     let (req_view, req_body) = if is_post {
         let (parts, b) = req.into_parts();
         (Request::from_parts(parts, Body::empty()), b)
@@ -2843,7 +2843,7 @@ async fn public_share(State(state): State<AppState>, AxPath(token): AxPath<Strin
                 res.headers_mut().insert(header::CONTENT_TYPE, header::HeaderValue::from_static("text/html; charset=utf-8"));
                 return res;
             }
-            // Rate-Limit für Passwortversuche
+            // Rate limit for password attempts
             let key = crate::middleware::request_client(&req_view, &state.proxies);
             if !state.login_limiter.allow(&key) {
                 return err(StatusCode::TOO_MANY_REQUESTS, "too many password attempts, please try again later");
@@ -2864,7 +2864,7 @@ async fn public_share(State(state): State<AppState>, AxPath(token): AxPath<Strin
                 res.headers_mut().insert(header::LOCATION, format!("/s/{}", token).parse().unwrap_or(header::HeaderValue::from_static("/")));
                 return res;
             }
-            // GET mit korrektem pw → direkt weiter
+            // GET with correct pw -> continue directly
         } else if is_post {
             let mut res = Response::new(Body::empty());
             *res.status_mut() = StatusCode::SEE_OTHER;
@@ -3168,7 +3168,7 @@ async fn public_share_upload(State(state): State<AppState>, AxPath(token): AxPat
     state.indexer.trigger_reindex(user.id, root);
     let accept = header_str(&Request::new(Body::empty()), "accept");
     let _ = accept;
-    // Redirect für Browser (Accept text/html) — Header waren konsumiert; wir prüfen Query als Proxy
+    // Redirect for browsers (Accept text/html) — headers were consumed; query acts as proxy
     let mut res = Response::new(Body::empty());
     *res.status_mut() = StatusCode::SEE_OTHER;
     let mut loc = format!("/s/{}?uploaded=1", token);
@@ -3178,7 +3178,7 @@ async fn public_share_upload(State(state): State<AppState>, AxPath(token): AxPat
     if !pw.is_empty() {
         loc.push_str(&format!("&pw={}", pw));
     } else {
-        // Cookie für HTML-Clients setzen
+        // Set cookie for HTML clients
         set_share_cookie(&mut res, &state, &token, &share.password_hash);
     }
     res.headers_mut().insert(header::LOCATION, loc.parse().unwrap_or(header::HeaderValue::from_static("/")));

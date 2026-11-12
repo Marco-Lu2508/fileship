@@ -1,6 +1,6 @@
 //! Auth: JWT (HS256, hand-rolled — Go-kompatibel), Refresh-Tokens, TOTP-2FA, bcrypt.
 //!
-//! Go nutzt golang-jwt HS256 mit Claims {uid, adm, 2fa_pending, exp, iat}.
+//! Go uses golang-jwt HS256 with claims {uid, adm, 2fa_pending, exp, iat}.
 //! Wir signieren/validieren exakt dasselbe Format, damit Tokens austauschbar sind.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -84,7 +84,7 @@ pub fn parse_access_token(secret: &str, token: &str) -> Option<Claims> {
     let header_b64 = parts.next()?;
     let payload_b64 = parts.next()?;
     let sig_b64 = parts.next()?;
-    // Alg prüfen (kein alg=none / kein RS256-Confusion)
+    // Verify alg (no alg=none / no RS256 confusion)
     let header = b64d(header_b64)?;
     let hv: serde_json::Value = serde_json::from_slice(&header).ok()?;
     if hv.get("alg").and_then(|a| a.as_str()) != Some("HS256") {
@@ -126,7 +126,7 @@ pub fn generate_refresh_token() -> (String, chrono::DateTime<chrono::Local>) {
 
 // ── bcrypt ──────────────────────────────────────────────
 
-/// Go bcrypt.DefaultCost = 10. Rust-Crate nutzt Default 12 — wir setzen 10 für Parität/Speed.
+/// Go bcrypt.DefaultCost = 10. Rust crate defaults to 12 — we use 10 for parity/speed.
 pub const BCRYPT_COST: u32 = 10;
 
 pub fn hash_password(pw: &str) -> Result<String, bcrypt::BcryptError> {

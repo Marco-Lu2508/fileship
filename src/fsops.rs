@@ -1,5 +1,5 @@
 //! Filesystem-Operationen — 1:1 Port von internal/fs (Go).
-//! Pfad-Sicherheit: Resolve() folgt denselben Regeln (Absolutpfad, Symlink-Verbot, Präfix-Check).
+//! Path safety: Resolve() follows the same rules (absolute path, no symlinks, prefix check).
 
 use rand_core::Rng;
 use crate::model::{FileInfo, ListOptions, ListResult};
@@ -88,7 +88,7 @@ fn join_clean(root: &str, rel: &str) -> String {
     go_clean(&format!("{}/{}", root.trim_end_matches('/'), rel))
 }
 
-/// Resolve gibt den absoluten, sicheren Pfad zurück oder ErrForbidden.
+/// Resolve returns the absolute, safe path or ErrForbidden.
 pub fn resolve(root: &str, rel: &str) -> FsResult<String> {
     let root_abs = std::fs::canonicalize(root).map_err(|_| FsError("path outside root".into()))?;
     let root_str = root_abs.to_string_lossy().to_string();
@@ -97,7 +97,7 @@ pub fn resolve(root: &str, rel: &str) -> FsResult<String> {
     if abs != root_str && !abs.starts_with(&prefix) {
         return ferr("path outside root");
     }
-    // Symlink-Verbot: jede existierende Komponente von abs bis root (exkl. root) prüfen
+    // Symlink check: every existing component from abs up to root (excl. root)
     let mut cur = abs.clone();
     while cur != root_str {
         match std::fs::symlink_metadata(&cur) {
@@ -252,9 +252,9 @@ pub fn search(root: &str, query: &str) -> FsResult<Vec<FileInfo>> {
     Ok(results)
 }
 
-/// Walk wie filepath.Walk: Fehler beim Lesen eines Dirs werden übersprungen
-/// (Go-Callbacks in Search geben nie Fehler zurück, Walk überspringt Unlesbares nicht —
-/// aber für Search/Indexer ist Skip-Semantik korrekt).
+/// Walk like filepath.Walk: errors reading a dir are skipped
+/// (Go callbacks in Search never return errors; Walk does not skip unreadable entries —
+/// but for Search/Indexer, skip semantics are correct).
 fn walk_recursive<F: FnMut(&Path, &std::fs::Metadata)>(dir: &Path, _base: &str, f: &mut F) -> FsResult<()> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -295,16 +295,15 @@ pub fn go_dir(p: &str) -> String {
 }
 
 pub fn dir_size(path: &str) -> FsResult<i64> {
-    // Device-angehaengter Walk (wie `du -x`): Subtrees auf anderen Devices
-    // (Pseudo-FS wie /proc, /sys, /dev) zaehlen nicht mit. /proc/kcore meldet
-    // sonst 128 TB virtueller Groesse, /sys noch einiges dazu. Bei einem
-    // normalem ROOT_PATH auf einer Platte aendert sich nichts.
-    use std::os::unix::fs::MetadataExt;
-    let root_dev = std::fs::metadata(path).map(|m| m.dev()).unwrap_or(0);
+    // Walk like filepath.Walk, but skip pseudo-filesystems via their statfs
+    // fstype: /proc, /sys, /dev, cgroupfs, debugfs. Their virtual files
+    // report gigantic apparent sizes (/proc/kcore alone is 128 TB), so
+    // counting them makes any bind-mounted host root show hundreds of TB.
+    // Real filesystems on other mounts (e.g. a second disk under /mnt) are
+    // fully counted. Unreadable subtrees are skipped instead of discarding
+    // the whole sum.
     let mut size: i64 = 0;
-    fn rec(p: &Path, size: &mut i64, dev: u64) {
-        // Unlesbare Subtrees (z. B. /sys/kernel/debug bei gemountetem
-        // Host-Root) werden uebersprungen statt die ganze Summe zu verwerfen.
+    fn rec(p: &Path, size: &mut i64) {
         let Ok(entries) = std::fs::read_dir(p) else {
             return;
         };
@@ -317,17 +316,38 @@ pub fn dir_size(path: &str) -> FsResult<i64> {
                 continue;
             }
             if ft.is_dir() {
-                if md.dev() != dev {
-                    continue; // separates Mount / Pseudo-FS
+                if is_pseudo_fs(&e.path()) {
+                    continue;
                 }
-                rec(&e.path(), size, dev);
+                rec(&e.path(), size);
             } else {
                 *size += md.len() as i64;
             }
         }
     }
-    rec(Path::new(path), &mut size, root_dev);
+    rec(Path::new(path), &mut size);
     Ok(size)
+}
+
+/// True for pseudo-filesystems whose files have virtual (non-disk) sizes.
+fn is_pseudo_fs(path: &Path) -> bool {
+    use std::ffi::CString;
+    let Ok(cpath) = CString::new(path.to_string_lossy().into_owned()) else {
+        return false;
+    };
+    unsafe {
+        let mut st: libc::statfs = std::mem::zeroed();
+        if libc::statfs(cpath.as_ptr(), &mut st) != 0 {
+            return false; // cannot tell — count it rather than skip it
+        }
+        const PROC: i64 = 0x9fa0;
+        const SYS: i64 = 0x6265_6572;
+        const DEVTMPFS: i64 = 0x7371_7374;
+        const CGROUP: i64 = 0x27e0eb;
+        const CGROUP2: i64 = 0x6367_7270;
+        const DEBUGFS: i64 = 0x6462_6773;
+        matches!(st.f_type as i64, PROC | SYS | DEVTMPFS | CGROUP | CGROUP2 | DEBUGFS)
+    }
 }
 
 pub fn mkdir(root: &str, rel: &str) -> FsResult<()> {
@@ -489,14 +509,14 @@ fn copy_exclusive(src: &Path, dst: &Path) -> FsResult<()> {
     let mut out = std::fs::OpenOptions::new().write(true).create_new(true).open(dst)?;
     std::io::copy(&mut inp, &mut out)?;
     drop(out);
-    // mtime übernehmen (Go Chtimes)
+    // preserve mtime (Go Chtimes)
     if let Ok(mtime) = md.modified() {
         let _ = filetime_set(dst, mtime);
     }
     Ok(())
 }
 
-// mtime übernehmen (Go Chtimes) via utimensat-FFI (kein libc-Dep nötig).
+// preserve mtime (Go Chtimes) via utimensat FFI (no libc dep needed).
 #[repr(C)]
 struct Timespec {
     tv_sec: i64,
@@ -518,8 +538,8 @@ fn filetime_set(p: &Path, t: std::time::SystemTime) -> std::io::Result<()> {
     }
 }
 
-/// Multipart-Spool: temporäre Datei im System-Temp (Go: os.CreateTemp).
-/// Gibt (Pfad, File) zurück; Aufrufer schreibt Chunks und liest Größe via Metadata.
+/// Multipart spool: temp file in the system temp dir (Go: os.CreateTemp).
+/// Returns (path, file); caller writes chunks and reads size via Metadata.
 pub fn spool_file() -> FsResult<(PathBuf, std::fs::File)> {
     let dir = std::env::temp_dir();
     let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -620,10 +640,10 @@ pub fn detect_mime(root: &str, rel: &str) -> FsResult<String> {
     Ok(detected.to_string())
 }
 
-/// Port von Go net/http.DetectContentType (sniff.go) — Teilmenge mit identischem Ergebnis
-/// für alle gebräuchlichen Typen.
+/// Port of Go net/http.DetectContentType (sniff.go) — subset with identical results
+/// for all common types.
 pub fn detect_content_type(data: &[u8]) -> &'static str {
-    // XML/HTML-Muster (Go trimmt führende Leerzeichen, case-insensitive)
+    // XML/HTML patterns (Go trims leading whitespace, case-insensitive)
     let mut s = data;
     while !s.is_empty() && matches!(s[0], b' ' | b'\t' | b'\r' | b'\n') {
         s = &s[1..];
@@ -707,7 +727,7 @@ pub fn detect_content_type(data: &[u8]) -> &'static str {
     if sig(&[0x00, 0x01, 0x00, 0x00]) {
         return "application/octet-stream";
     }
-    // Text-Erkennung wie Go: keine Steuerzeichen außer \t \n \f \r
+    // Text detection like Go: no control chars except \t \n \f \r
     let is_text = data.iter().all(|&b| {
         b == b'\t' || b == b'\n' || b == b'\x0C' || b == b'\r' || (0x20..=0x7E).contains(&b) || b >= 0x80
     });
@@ -736,7 +756,7 @@ fn ffmpeg_path() -> Option<String> {
     use std::sync::OnceLock;
     static P: OnceLock<Option<String>> = OnceLock::new();
     P.get_or_init(|| {
-        // `which ffmpeg` ohne Shell-Toolchain: PATH durchsuchen
+        // `which ffmpeg` without a shell toolchain: search PATH
         let path_var = std::env::var("PATH").unwrap_or_default();
         for dir in path_var.split(':') {
             let cand = format!("{}/ffmpeg", dir);
@@ -990,7 +1010,7 @@ fn write_tar_plain<W: Write>(entries: &[ArchiveEntry], output: W) -> FsResult<()
     Ok(())
 }
 
-// ── Transfer (EXDEV-fähig) ──────────────────────────────
+// ── Transfer (EXDEV-capable) ──────────────────────────────
 
 pub fn transfer(src: &str, dst: &str) -> FsResult<()> {
     match std::fs::symlink_metadata(dst) {
@@ -1003,7 +1023,7 @@ pub fn transfer(src: &str, dst: &str) -> FsResult<()> {
         Err(e) if e.raw_os_error() == Some(18) => {}
         Err(e) => return Err(e.into()),
     }
-    // EXDEV: Kopie ohne Symlinks zu folgen
+    // EXDEV: copy without following symlinks
     let md = std::fs::metadata(src)?;
     let mut bad = false;
     walk_all(Path::new(src), &mut |_p, m| {
@@ -1068,7 +1088,7 @@ pub fn prepare_unzip(root: &str, zip_rel: &str, dest_rel: &str) -> FsResult<Unzi
         if clean != name {
             return ferr(&format!("illegal path in zip: {}", raw_name));
         }
-        // Nicht-regulär (Symlink etc.) ablehnen — unix_mode prüfen wenn vorhanden
+        // Reject non-regular files (symlink etc.) — check unix_mode if available
         if let Some(mode) = zf.unix_mode() {
             let fmt = mode & 0o170000;
             if fmt != 0 && fmt != 0o100000 && fmt != 0o040000 {
@@ -1093,7 +1113,7 @@ pub fn prepare_unzip(root: &str, zip_rel: &str, dest_rel: &str) -> FsResult<Unzi
         total += size;
         entries.push(UnzipEntry { path: rel, is_dir, size, index: i });
     }
-    // Datei-als-Ordner-Check über alle Entries
+    // File-as-folder check across all entries
     for entry in &entries {
         let mut parent = parent_of(&entry.path);
         while parent != "." && !parent.is_empty() {

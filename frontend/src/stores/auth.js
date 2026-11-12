@@ -3,7 +3,7 @@ import { csrfHeaders, ensureCSRFToken } from '../lib/csrf.js'
 
 export const user = writable(null)
 export const accessToken = writable(localStorage.getItem('access_token') || '')
-export const twoFAPending = writable(null) // { pending_token } wenn 2FA nötig
+export const twoFAPending = writable(null) // { pending_token } when 2FA is required
 export const activeSourceId = writable(null)
 export const activeAgentId = writable(null)
 

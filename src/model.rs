@@ -32,7 +32,7 @@ pub fn parse_db_time(s: &str) -> Option<DateTime<Local>> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
         return Some(dt.with_timezone(&Local));
     }
-    // Go sqlite: "2006-01-02 15:04:05.999999999-07:00" / ohne Zone / ohne Fraction
+    // Go sqlite: "2006-01-02 15:04:05.999999999-07:00" / no zone / no fraction
     for fmt in [
         "%Y-%m-%d %H:%M:%S%.f%:z",
         "%Y-%m-%d %H:%M:%S%:z",
@@ -53,7 +53,7 @@ pub fn parse_db_time(s: &str) -> Option<DateTime<Local>> {
     None
 }
 
-/// Format für SQLite — wie Go (mit Offset), damit DBs austauschbar bleiben.
+/// SQLite format — like Go (with offset), so DBs stay interchangeable.
 pub fn fmt_db_time(t: &DateTime<Local>) -> String {
     t.format("%Y-%m-%d %H:%M:%S%.f%:z").to_string()
 }

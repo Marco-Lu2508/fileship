@@ -520,7 +520,7 @@ fn dav_proppatch(root: &str, name: &str) -> Response {
     if !Path::new(&abs).exists() {
         return err_resp(StatusCode::NOT_FOUND, "not found");
     }
-    // x/net/webdav: PROPPATCH -> 207 mit 403 pro Property
+    // x/net/webdav: PROPPATCH -> 207 with 403 per property
     let href_path = if rel.is_empty() { "/webdav/".to_string() } else { format!("/webdav/{}/", href_escape(&rel)) };
     let body = format!(
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<multistatus xmlns=\"DAV:\">\n<response>\n<href>{}</href>\n<propstat>\n<prop/>\n<status>HTTP/1.1 403 Forbidden</status>\n</propstat>\n</response>\n</multistatus>\n",
@@ -535,6 +535,6 @@ fn dav_proppatch(root: &str, name: &str) -> Response {
     res
 }
 
-// HeaderMap-Import-Fix (HeaderMap wird nur für Signaturen genutzt)
+// HeaderMap import (only used in signatures)
 #[allow(dead_code)]
 fn _unused(_: HeaderMap) {}

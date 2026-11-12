@@ -126,7 +126,7 @@ pub async fn admin_mw(req: Request<Body>, next: Next) -> Response {
     }
 }
 
-/// AuthCtx-Extractor für Handler (liest aus Extensions, sonst parse-on-demand).
+/// AuthCtx extractor for handlers (reads from extensions, else parse-on-demand).
 pub struct Auth(AuthCtx);
 
 impl<S> FromRequestParts<S> for Auth
@@ -139,7 +139,7 @@ where
         if let Some(ctx) = parts.extensions.get::<AuthCtx>() {
             return Ok(Auth(*ctx));
         }
-        // Fallback (sollte nicht passieren — Middleware läuft immer davor)
+        // Fallback (should not happen — middleware always runs first)
         let _ = state;
         Err(err_resp(StatusCode::UNAUTHORIZED, "unauthorized"))
     }
@@ -202,7 +202,7 @@ pub async fn agent_route_mw(
     crate::handler::serve_agent_file_request(&state, req, agent_id).await
 }
 
-// ── Rate Limiter (x/time/rate-Äquivalent) ───────────────
+// ── Rate limiter (x/time/rate equivalent) ───────────────
 
 struct Bucket {
     tokens: f64,
@@ -482,7 +482,7 @@ fn apply_security_headers(res: &mut Response, tls: bool) {
     set(h, "referrer-policy", "no-referrer");
     set(h, "permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
     set(h, "cross-origin-opener-policy", "same-origin");
-    // Handler-eigene CSP (Download/Preview) gewinnt — Go setzt sie nachträglich
+    // Handler's own CSP (download/preview) wins — Go sets it afterwards
     if !h.contains_key(header::CONTENT_SECURITY_POLICY) {
         set(h, "content-security-policy", APP_CSP);
     }
@@ -491,7 +491,7 @@ fn apply_security_headers(res: &mut Response, tls: bool) {
     }
 }
 
-// ── Helpers für Handler ─────────────────────────────────
+// ── Handler helpers ─────────────────────────────────
 
 pub fn json_resp<T: serde::Serialize>(status: StatusCode, v: &T) -> Response {
     let body = serde_json::to_vec(v).unwrap_or_else(|_| b"null".to_vec());
@@ -520,7 +520,7 @@ pub async fn read_json_only<T: for<'de> serde::Deserialize<'de>>(
     serde_json::from_slice(&bytes).map_err(|_| err_resp(StatusCode::BAD_REQUEST, "bad request"))
 }
 
-/// Query-Parameter als HashMap (axum Query-Äquivalent, ohne Extra-Dep).
+/// Query params as HashMap (axum Query equivalent, no extra dep).
 pub fn query_map(req: &Request<Body>) -> HashMap<String, String> {
     let mut map = HashMap::new();
     if let Some(q) = req.uri().query() {

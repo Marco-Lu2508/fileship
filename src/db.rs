@@ -1,6 +1,6 @@
 //! DB-Layer: rusqlite, Schema identisch zum Go-Original.
 //! Eine Connection + Mutex (SQLite serialisiert ohnehin), WAL, FK an.
-//! DATETIME als Go-Format gespeichert — DBs sind mit dem Original austauschbar.
+//! DATETIME stored in Go format — databases are interchangeable with the original.
 
 use rand_core::Rng;
 use crate::model::*;
@@ -697,8 +697,8 @@ impl Db {
 
     pub fn trash_purge_expired(&self, user_id: i64) -> Vec<String> {
         let now = fmt_db_time(&Local::now());
-        // Go vergleicht expires_at < time.Now() — Go speichert mit Offset; Stringvergleich
-        // funktioniert hier nicht zuverlässig, daher laden + filtern.
+        // Go compares expires_at < time.Now() — Go stores with offset; string comparison
+        // is unreliable here, so load + filter instead.
         let items = self.trash_list(user_id);
         let expired: Vec<String> = items
             .into_iter()
@@ -710,7 +710,7 @@ impl Db {
                 "DELETE FROM trash WHERE user_id = ? AND expires_at < ?",
                 params![user_id, now],
             );
-            // Falls Stringvergleich nichts traf (Format-Differenzen), einzeln löschen:
+            // If string comparison matched nothing (format differences), delete individually:
             for n in &expired {
                 let _ = self.exec("DELETE FROM trash WHERE user_id = ? AND trash_name = ?", params![user_id, n]);
             }
