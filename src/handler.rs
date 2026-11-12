@@ -664,6 +664,33 @@ async fn list_files(State(state): State<AppState>, auth: Auth, req: Request<Body
         });
         result.total = result.total.min(result.files.len() as i64);
     }
+    // Fill folder sizes for this page (the UI shows "—" when dir_size is
+    // empty). Parallel walk via cached_dir_size (60 s TTL); capped so a
+    // page with hundreds of folders cannot stall the response.
+    {
+        use rayon::iter::{IntoParallelIterator, ParallelIterator};
+        let root_abs = root.clone();
+        let dirs: Vec<(usize, String)> = result
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.is_dir)
+            .take(300)
+            .map(|(i, f)| (i, f.path.clone()))
+            .collect();
+        let sizes: Vec<(usize, i64)> = dirs
+            .into_par_iter()
+            .map(|(i, rel)| {
+                let v = fsops::resolve(&root_abs, &rel)
+                    .map(|abs| cached_dir_size(&abs))
+                    .unwrap_or(0);
+                (i, v)
+            })
+            .collect();
+        for (i, v) in sizes {
+            result.files[i].dir_size = v;
+        }
+    }
     if state.db.index_count_for_user(auth.user_id()) == 0 {
         state.indexer.trigger_reindex(auth.user_id(), root);
     }
