@@ -295,11 +295,16 @@ pub fn go_dir(p: &str) -> String {
 }
 
 pub fn dir_size(path: &str) -> FsResult<i64> {
+    // Device-angehaengter Walk (wie `du -x`): Subtrees auf anderen Devices
+    // (Pseudo-FS wie /proc, /sys, /dev) zaehlen nicht mit. /proc/kcore meldet
+    // sonst 128 TB virtueller Groesse, /sys noch einiges dazu. Bei einem
+    // normalem ROOT_PATH auf einer Platte aendert sich nichts.
+    use std::os::unix::fs::MetadataExt;
+    let root_dev = std::fs::metadata(path).map(|m| m.dev()).unwrap_or(0);
     let mut size: i64 = 0;
-    fn rec(p: &Path, size: &mut i64) {
+    fn rec(p: &Path, size: &mut i64, dev: u64) {
         // Unlesbare Subtrees (z. B. /sys/kernel/debug bei gemountetem
         // Host-Root) werden uebersprungen statt die ganze Summe zu verwerfen.
-        // Go gab den Teil-Summe zurueck; Rust gab vorher 0 zurueck.
         let Ok(entries) = std::fs::read_dir(p) else {
             return;
         };
@@ -312,13 +317,16 @@ pub fn dir_size(path: &str) -> FsResult<i64> {
                 continue;
             }
             if ft.is_dir() {
-                rec(&e.path(), size);
+                if md.dev() != dev {
+                    continue; // separates Mount / Pseudo-FS
+                }
+                rec(&e.path(), size, dev);
             } else {
                 *size += md.len() as i64;
             }
         }
     }
-    rec(Path::new(path), &mut size);
+    rec(Path::new(path), &mut size, root_dev);
     Ok(size)
 }
 
