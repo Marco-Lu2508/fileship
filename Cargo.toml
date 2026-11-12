@@ -48,6 +48,7 @@ h3 = "0.0.8"
 h3-quinn = "0.0.10"
 tower = "0.5.3"
 openidconnect = "4.1.0"
+rayon = "1.12.0"
 
 [profile.release]
 opt-level = 3

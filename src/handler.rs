@@ -165,6 +165,28 @@ async fn db_backup(State(state): State<AppState>, _auth: Auth) -> Response {
 
 // ── Helpers ─────────────────────────────────────────────
 
+/// disk_usage results cached per root for a short TTL — computing them
+/// walks the whole tree and the sidebar asks on every page load.
+fn cached_dir_size(root: &str) -> i64 {
+    use std::collections::HashMap;
+    use std::sync::{LazyLock, Mutex};
+    use std::time::{Duration, Instant};
+    static CACHE: LazyLock<Mutex<HashMap<String, (Instant, i64)>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    if let Ok(c) = CACHE.lock() {
+        if let Some((at, v)) = c.get(root) {
+            if at.elapsed() < Duration::from_secs(60) {
+                return *v;
+            }
+        }
+    }
+    let v = fsops::dir_size(root).unwrap_or(0);
+    if let Ok(mut c) = CACHE.lock() {
+        c.insert(root.to_string(), (Instant::now(), v));
+    }
+    v
+}
+
 fn user_root(state: &AppState, req: &Request<Body>) -> String {
     let ctx = req.extensions().get::<crate::middleware::AuthCtx>().copied();
     let (user_id, is_admin) = match ctx {
@@ -2171,7 +2193,7 @@ async fn change_password(State(state): State<AppState>, auth: Auth, req: Request
 async fn get_settings(State(state): State<AppState>, auth: Auth, req: Request<Body>) -> Response {
     let (quota, allowed_types) = state.db.get_user_quota_and_types(auth.user_id());
     let root = user_root(&state, &req);
-    let disk_usage = fsops::dir_size(&root).unwrap_or(0);
+    let disk_usage = cached_dir_size(&root);
     json(
         StatusCode::OK,
         &serde_json::json!({
@@ -2264,10 +2286,10 @@ async fn audit_log(State(state): State<AppState>, _auth: Auth, req: Request<Body
 
 async fn stats(State(state): State<AppState>, _auth: Auth, _req: Request<Body>) -> Response {
     let mut users = state.db.list_users_with_quota();
-    let disk_usage = fsops::dir_size(&state.cfg.root_path).unwrap_or(0);
+    let disk_usage = cached_dir_size(&state.cfg.root_path);
     for u in users.iter_mut() {
         let root = resolve_root(&state, &u.root_path);
-        u.disk_usage = fsops::dir_size(&root).unwrap_or(0);
+        u.disk_usage = cached_dir_size(&root);
     }
     let user_count = users.len();
     json(

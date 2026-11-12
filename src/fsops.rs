@@ -295,38 +295,56 @@ pub fn go_dir(p: &str) -> String {
 }
 
 pub fn dir_size(path: &str) -> FsResult<i64> {
-    // Walk like filepath.Walk, but skip pseudo-filesystems via their statfs
-    // fstype: /proc, /sys, /dev, cgroupfs, debugfs. Their virtual files
-    // report gigantic apparent sizes (/proc/kcore alone is 128 TB), so
-    // counting them makes any bind-mounted host root show hundreds of TB.
-    // Real filesystems on other mounts (e.g. a second disk under /mnt) are
-    // fully counted. Unreadable subtrees are skipped instead of discarding
-    // the whole sum.
-    let mut size: i64 = 0;
-    fn rec(p: &Path, size: &mut i64) {
-        let Ok(entries) = std::fs::read_dir(p) else {
-            return;
-        };
-        for e in entries.flatten() {
-            let Ok(md) = e.metadata() else {
-                continue;
-            };
-            let ft = md.file_type();
-            if ft.is_symlink() || !ft.is_file() && !ft.is_dir() {
-                continue;
-            }
-            if ft.is_dir() {
-                if is_pseudo_fs(&e.path()) {
+    // Parallel recursive walk; pseudo-filesystems (via statfs fstype) and
+    // unreadable subtrees are skipped. Level-wise rayon batches keep the
+    // code simple and scale with core count on huge trees (e.g. a
+    // bind-mounted host root with Docker layers under /var/lib/docker).
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    fn walk_dir(d: &Path) -> (Vec<PathBuf>, Vec<i64>) {
+        let mut dirs = Vec::new();
+        let mut sizes = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(d) {
+            for e in entries.flatten() {
+                let Ok(md) = e.metadata() else {
+                    continue;
+                };
+                let ft = md.file_type();
+                if ft.is_symlink() || (!ft.is_file() && !ft.is_dir()) {
                     continue;
                 }
-                rec(&e.path(), size);
-            } else {
-                *size += md.len() as i64;
+                if ft.is_dir() {
+                    if is_pseudo_fs(&e.path()) {
+                        continue;
+                    }
+                    dirs.push(e.path());
+                } else {
+                    sizes.push(md.len() as i64);
+                }
             }
         }
+        (dirs, sizes)
     }
-    rec(Path::new(path), &mut size);
-    Ok(size)
+
+    let total = AtomicI64::new(0);
+    let mut dirs = vec![PathBuf::from(path)];
+    while !dirs.is_empty() {
+        let (next_dirs, sizes): (Vec<PathBuf>, Vec<i64>) = dirs
+            .into_par_iter()
+            .map(|d| walk_dir(&d))
+            .reduce(
+                || (Vec::new(), Vec::new()),
+                |mut a, b| {
+                    a.0.extend(b.0);
+                    a.1.extend(b.1);
+                    a
+                },
+            );
+        total.fetch_add(sizes.iter().sum(), Ordering::Relaxed);
+        dirs = next_dirs;
+    }
+    Ok(total.load(Ordering::Relaxed))
 }
 
 /// True for pseudo-filesystems whose files have virtual (non-disk) sizes.
