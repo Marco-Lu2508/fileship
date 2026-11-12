@@ -34,6 +34,9 @@
   let volume = 1
   let isMuted = false
   let videoNaturalWidth = 0
+  // remembers the playback position per file across sessions
+  let lastPosSave = 0
+  const posKey = (path) => `fileship_video_pos:${path}`
   let videoNaturalHeight = 0
   let transcodeFallback = false
 
@@ -230,6 +233,38 @@
     videoNaturalWidth = videoEl.videoWidth || 0
     videoNaturalHeight = videoEl.videoHeight || 0
     videoEl.playbackRate = playbackRate
+    // resume where this file was left off (not at the very end)
+    try {
+      const saved = parseFloat(localStorage.getItem(posKey(file.path)) || '')
+      if (
+        saved > 5 &&
+        Number.isFinite(videoEl.duration) &&
+        saved < videoEl.duration - 10
+      ) {
+        videoEl.currentTime = saved
+      }
+    } catch {}
+  }
+
+  function handleVideoTimeUpdate() {
+    if (!videoEl || !file?.path) return
+    const now = Date.now()
+    if (now - lastPosSave < 5000) return // save at most every 5s
+    lastPosSave = now
+    try {
+      const t = videoEl.currentTime
+      if (t > 5 && Number.isFinite(videoEl.duration) && t < videoEl.duration - 5) {
+        localStorage.setItem(posKey(file.path), String(t))
+      }
+    } catch {}
+  }
+
+  function handleVideoEnded() {
+    // finished watching: forget the position
+    try {
+      if (file?.path) localStorage.removeItem(posKey(file.path))
+    } catch {}
+    handleMediaEnded()
   }
 
   $: naturalRatio =
@@ -480,7 +515,8 @@
                     if (videoEl) videoEl.playbackRate = playbackRate
                   }}
                   onpause={() => (mediaPaused = true)}
-                  onended={handleMediaEnded}
+                  ontimeupdate={handleVideoTimeUpdate}
+                  onended={handleVideoEnded}
                   onerror={mediaError}><track kind="captions" /></video
                 >
               </div>

@@ -115,6 +115,7 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/api/users/{id}/permissions", get(list_permissions).post(set_permission))
         .route("/api/permissions/{pid}", delete(delete_permission))
         .route("/api/admin/backup/db", get(db_backup))
+        .route("/api/transfer", post(cross_transfer))
         .route_layer(axum::middleware::from_fn(crate::middleware::admin_mw))
         .route_layer(axum::middleware::from_fn(crate::middleware::auth_mw));
 
@@ -1519,7 +1520,7 @@ pub fn serve_file_response(abs: &str, _name: Option<&str>, extra_headers: &[(&st
             return None;
         }
         let _ = f.seek(std::io::SeekFrom::Start(pos)).await;
-        let to_read = remaining.min(64 * 1024) as usize;
+        let to_read = remaining.min(1 << 20) as usize; // 1 MiB chunks: fewer syscalls, less userspace copying
         let mut buf = vec![0u8; to_read];
         match f.read(&mut buf).await {
             Ok(0) => None,
@@ -2682,6 +2683,419 @@ async fn update_source(State(state): State<AppState>, auth: Auth, AxPath(id): Ax
 async fn delete_source(State(state): State<AppState>, auth: Auth, AxPath(id): AxPath<i64>, _req: Request<Body>) -> Response {
     state.db.delete_source(auth.user_id(), id);
     empty(StatusCode::NO_CONTENT)
+}
+
+// ── Cross-source transfer (server <-> agent, agent <-> agent) ──
+
+#[derive(serde::Deserialize)]
+struct CrossTransferBody {
+    #[serde(default)]
+    src_agent_id: i64,
+    #[serde(default)]
+    src_path: String,
+    #[serde(default)]
+    dst_agent_id: i64,
+    #[serde(default)]
+    dst_path: String,
+    #[serde(default)]
+    mode: String,
+}
+
+enum Side {
+    Local(String),          // absolute root dir
+    Agent(i64),
+}
+
+const TRANSFER_CHUNK: u64 = 4 << 20;
+
+fn xfer_join(base: &str, rel: &str) -> String {
+    if rel.is_empty() {
+        base.to_string()
+    } else if base == "/" {
+        format!("/{}", rel)
+    } else {
+        format!("{}/{}", base.trim_end_matches('/'), rel)
+    }
+}
+
+async fn agent_call(
+    hub: &std::sync::Arc<crate::agent::Hub>,
+    agent_id: i64,
+    action: &str,
+    path: &str,
+    offset: u64,
+) -> Result<crate::agent::Message, String> {
+    let mut p = HashMap::new();
+    p.insert("path".to_string(), path.to_string());
+    p.insert("offset".to_string(), offset.to_string());
+    hub.request(agent_id, action, p, Vec::new()).await
+}
+
+async fn xfer_ensure_dst(state: &AppState, dst: &Side, dst_rel: &str) -> Result<(), String> {
+    match dst {
+        Side::Local(root) => {
+            let abs = fsops::resolve(root, dst_rel).map_err(|e| e.to_string())?;
+            if let Some(parent) = std::path::Path::new(&abs).parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+            }
+            tokio::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&abs)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Side::Agent(id) => {
+            let mut p = HashMap::new();
+            p.insert("path".to_string(), dst_rel.to_string());
+            p.insert("offset".to_string(), "0".to_string());
+            let res = state.agent_hub.request(*id, "write_chunk", p, Vec::new()).await?;
+            if res.status >= 400 {
+                return Err(res.error.clone().unwrap_or_else(|| "write failed".to_string()));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn xfer_copy_one(
+    state: &AppState,
+    src: &Side,
+    src_rel: &str,
+    dst: &Side,
+    dst_rel: &str,
+) -> Result<u64, String> {
+    let mut offset: u64 = 0;
+    let mut total: u64 = 0;
+    let mut wrote_any = false;
+    loop {
+        // read chunk
+        let data: Vec<u8> = match src {
+            Side::Local(root) => {
+                use tokio::io::{AsyncReadExt, AsyncSeekExt};
+                let abs = fsops::resolve(root, src_rel).map_err(|e| e.to_string())?;
+                let mut f = tokio::fs::File::open(&abs).await.map_err(|e| e.to_string())?;
+                f.seek(std::io::SeekFrom::Start(offset)).await.map_err(|e| e.to_string())?;
+                let mut buf = vec![0u8; TRANSFER_CHUNK as usize];
+                let n = f.read(&mut buf).await.map_err(|e| e.to_string())?;
+                buf.truncate(n);
+                total = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(total);
+                buf
+            }
+            Side::Agent(id) => {
+                let res = agent_call(&state.agent_hub, *id, "read_chunk", src_rel, offset).await?;
+                if res.status >= 400 {
+                    return Err(res.error.clone().unwrap_or_else(|| "read failed".to_string()));
+                }
+                if let Some(p) = res.params.as_ref() {
+                    if let Some(s) = p.get("size") {
+                        total = s.parse().unwrap_or(total);
+                    }
+                }
+                res.data
+            }
+        };
+        let n = data.len() as u64;
+        if n == 0 {
+            if !wrote_any {
+                xfer_ensure_dst(state, dst, dst_rel).await?;
+            }
+            break;
+        }
+        // write chunk
+        match dst {
+            Side::Local(root) => {
+                use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+                let abs = fsops::resolve(root, dst_rel).map_err(|e| e.to_string())?;
+                if let Some(parent) = std::path::Path::new(&abs).parent() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+                }
+                let mut f = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(offset == 0)
+                    .open(&abs)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if offset > 0 {
+                    f.seek(std::io::SeekFrom::Start(offset)).await.map_err(|e| e.to_string())?;
+                }
+                f.write_all(&data).await.map_err(|e| e.to_string())?;
+            }
+            Side::Agent(id) => {
+                let mut p = HashMap::new();
+                p.insert("path".to_string(), dst_rel.to_string());
+                p.insert("offset".to_string(), offset.to_string());
+                let res = state.agent_hub.request(*id, "write_chunk", p, data).await?;
+                if res.status >= 400 {
+                    return Err(res.error.clone().unwrap_or_else(|| "write failed".to_string()));
+                }
+            }
+        }
+        offset += n;
+        wrote_any = true;
+        if total > 0 && offset >= total {
+            break;
+        }
+        if total == 0 && n < TRANSFER_CHUNK {
+            break;
+        }
+    }
+    Ok(total.max(offset))
+}
+
+async fn xfer_delete(state: &AppState, side: &Side, rel: &str) -> Result<(), String> {
+    match side {
+        Side::Local(root) => fsops::delete(root, rel).map_err(|e| e.to_string()),
+        Side::Agent(id) => {
+            let mut p = HashMap::new();
+            p.insert("path".to_string(), rel.to_string());
+            let res = state.agent_hub.request(*id, "delete", p, Vec::new()).await?;
+            if res.status >= 400 {
+                return Err(res.error.clone().unwrap_or_else(|| "delete failed".to_string()));
+            }
+            Ok(())
+        }
+    }
+}
+
+// POST /api/transfer — copy/move between this server and remote agents
+// (agent_id 0 = this server). Files are streamed through the server in
+// 4 MiB chunks, so arbitrarily large files work without buffering in RAM.
+async fn cross_transfer(State(state): State<AppState>, auth: Auth, req: Request<Body>) -> Response {
+    let (parts, body_req) = req.into_parts();
+    let req_view = Request::from_parts(parts, Body::empty());
+    let body: CrossTransferBody = match read_json_only(body_req, 256 << 10).await {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    let mode = if body.mode == "move" { "move" } else { "copy" };
+    let src_rel = match fsops::clean_relative_path(&body.src_path) {
+        Ok(r) => r,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "invalid source path"),
+    };
+    let dst_rel = match fsops::clean_relative_path(&body.dst_path) {
+        Ok(r) => r,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "invalid destination path"),
+    };
+    if src_rel.is_empty() || dst_rel.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "paths required");
+    }
+    if body.src_agent_id == body.dst_agent_id && body.src_path == body.dst_path {
+        return err(StatusCode::BAD_REQUEST, "source and destination are identical");
+    }
+    let user_id = auth.user_id();
+    // Verify agents belong to this user
+    for id in [body.src_agent_id, body.dst_agent_id] {
+        if id > 0 {
+            if state.db.get_agent_device_by_id(user_id, id).is_none() {
+                return err(StatusCode::NOT_FOUND, "agent device not found");
+            }
+            if !state.agent_hub.is_online(id) {
+                return err(StatusCode::SERVICE_UNAVAILABLE, "remote device is offline");
+            }
+        }
+    }
+    let root = user_root(&state, &req_view);
+    let src_side = if body.src_agent_id > 0 {
+        Side::Agent(body.src_agent_id)
+    } else {
+        if let Err(r) = check_perm(&state, &req_view, &src_rel, "read") {
+            return r;
+        }
+        Side::Local(root.clone())
+    };
+    let dst_side = if body.dst_agent_id > 0 {
+        Side::Agent(body.dst_agent_id)
+    } else {
+        if let Err(r) = check_perm(&state, &req_view, &dst_rel, "write") {
+            return r;
+        }
+        Side::Local(root.clone())
+    };
+    if body.src_agent_id == body.dst_agent_id {
+        // Same side: use the fast in-place copy/rename.
+        let res = if mode == "move" {
+            fsops::rename(&root, &src_rel, &dst_rel)
+        } else {
+            fsops::copy(&root, &src_rel, &dst_rel)
+        };
+        return match res {
+            Ok(()) => {
+                state.indexer.trigger_reindex(user_id, root);
+                state.db.log_action(user_id, &username_of(&state, user_id), mode, &format!("{}->{}", src_rel, dst_rel), "");
+                broadcast(&state, mode, &dst_rel);
+                empty(StatusCode::CREATED)
+            }
+            Err(e) => err(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+    }
+
+    // Collect the file list on the source side.
+    struct XferItem {
+        rel: String,
+        is_dir: bool,
+    }
+    let (mut items, src_is_dir): (Vec<XferItem>, bool) = match &src_side {
+        Side::Local(r) => {
+            let abs = match fsops::resolve(r, &src_rel) {
+                Ok(a) => a,
+                Err(e) => return err(StatusCode::FORBIDDEN, &e.to_string()),
+            };
+            let md = match std::fs::metadata(&abs) {
+                Ok(m) => m,
+                Err(e) => return err(StatusCode::NOT_FOUND, &e.to_string()),
+            };
+            if !md.is_dir() {
+                (vec![XferItem { rel: src_rel.clone(), is_dir: false }], false)
+            } else {
+                let mut out = Vec::new();
+                let mut stack = vec![abs.clone()];
+                while let Some(dir) = stack.pop() {
+                    let entries = match std::fs::read_dir(&dir) {
+                        Ok(e) => e,
+                        Err(_) => continue,
+                    };
+                    for e in entries.flatten() {
+                        let p = e.path();
+                        let m = match std::fs::symlink_metadata(&p) {
+                            Ok(m) => m,
+                            Err(_) => continue,
+                        };
+                        let rel = p
+                            .strip_prefix(&abs)
+                            .map(|r| r.to_string_lossy().replace('\\', "/"))
+                            .unwrap_or_default();
+                        out.push(XferItem { rel: xfer_join(&src_rel, &rel), is_dir: m.is_dir() });
+                        if m.is_dir() {
+                            stack.push(p.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                (out, true)
+            }
+        }
+        Side::Agent(id) => {
+            let mut p = HashMap::new();
+            p.insert("path".to_string(), src_rel.clone());
+            p.insert("offset".to_string(), "0".to_string());
+            match state.agent_hub.request(*id, "walk", p, Vec::new()).await {
+                Ok(res) if res.status < 400 => {
+                    let mut out = Vec::new();
+                    let mut any = false;
+                    if let Some(meta) = res.meta.clone() {
+                        if let Some(arr) = meta.get("items").and_then(|v| v.as_array()) {
+                            for it in arr {
+                                any = true;
+                                out.push(XferItem {
+                                    rel: xfer_join(
+                                        &src_rel,
+                                        it.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+                                    ),
+                                    is_dir: it.get("is_dir").and_then(|v| v.as_bool()).unwrap_or(false),
+                                });
+                            }
+                        }
+                    }
+                    if !any {
+                        (vec![XferItem { rel: src_rel.clone(), is_dir: false }], false)
+                    } else {
+                        (out, true)
+                    }
+                }
+                _ => (vec![XferItem { rel: src_rel.clone(), is_dir: false }], false),
+            }
+        }
+    };
+
+    // Ensure the destination directory exists.
+    let dst_parent = std::path::Path::new(&dst_rel)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if src_is_dir {
+        match &dst_side {
+            Side::Local(r) => {
+                let abs = match fsops::resolve(r, &dst_rel) {
+                    Ok(a) => a,
+                    Err(e) => return err(StatusCode::FORBIDDEN, &e.to_string()),
+                };
+                if let Err(e) = std::fs::create_dir_all(&abs) {
+                    return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
+                }
+            }
+            Side::Agent(id) => {
+                let mut p = HashMap::new();
+                p.insert("path".to_string(), dst_rel.clone());
+                let res = match state.agent_hub.request(*id, "mkdir", p, Vec::new()).await {
+                    Ok(r) => r,
+                    Err(e) => return err(StatusCode::BAD_GATEWAY, &e),
+                };
+                if res.status >= 400 {
+                    return err(StatusCode::BAD_GATEWAY, res.error.as_deref().unwrap_or("mkdir failed"));
+                }
+            }
+        }
+    } else if !dst_parent.is_empty() {
+        match &dst_side {
+            Side::Local(r) => {
+                if let Ok(abs) = fsops::resolve(r, &dst_parent) {
+                    let _ = std::fs::create_dir_all(abs);
+                }
+            }
+            Side::Agent(id) => {
+                let mut p = HashMap::new();
+                p.insert("path".to_string(), dst_parent.clone());
+                let res = state.agent_hub.request(*id, "mkdir", p, Vec::new()).await;
+                if let Ok(res) = res {
+                    if res.status >= 400 {
+                        return err(StatusCode::BAD_GATEWAY, res.error.as_deref().unwrap_or("mkdir failed"));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut bytes_total: u64 = 0;
+    let mut files_done: u64 = 0;
+    for item in items.drain(..) {
+        if item.is_dir {
+            continue;
+        }
+        let rel_in_src = item.rel;
+        let rel_in_dst = if src_is_dir {
+            let sub = rel_in_src.strip_prefix(&src_rel).unwrap_or(&rel_in_src);
+            let sub = sub.trim_start_matches('/');
+            xfer_join(&dst_rel, sub)
+        } else {
+            dst_rel.clone()
+        };
+        match xfer_copy_one(&state, &src_side, &rel_in_src, &dst_side, &rel_in_dst).await {
+            Ok(n) => {
+                bytes_total += n;
+                files_done += 1;
+            }
+            Err(e) => {
+                return err(StatusCode::BAD_GATEWAY, &format!("transferring {}: {}", rel_in_src, e));
+            }
+        }
+    }
+
+    if mode == "move" {
+        if let Err(e) = xfer_delete(&state, &src_side, &src_rel).await {
+            return err(StatusCode::BAD_GATEWAY, &format!("copied, but deleting source failed: {}", e));
+        }
+    }
+    if matches!(src_side, Side::Local(_)) {
+        state.indexer.trigger_reindex(user_id, root.clone());
+    }
+    if matches!(dst_side, Side::Local(_)) {
+        state.indexer.trigger_reindex(user_id, root);
+    }
+    state.db.log_action(user_id, &username_of(&state, user_id), mode, &format!("{}->{} ({} files)", src_rel, dst_rel, files_done), "");
+    broadcast(&state, mode, &dst_rel);
+    json(StatusCode::CREATED, &serde_json::json!({"files": files_done, "bytes": bytes_total}))
 }
 
 // ── Agents ─────────────────────────────────────────────

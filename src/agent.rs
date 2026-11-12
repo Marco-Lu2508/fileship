@@ -559,6 +559,134 @@ pub fn execute_action(root_abs: &str, req: &Message) -> Message {
                 Err(e) => Message::err(500, &e.to_string()),
             }
         }
+        "read_chunk" => {
+            const CHUNK: u64 = 4 << 20;
+            let clean = match fsops::clean_relative_path(get("path")) {
+                Ok(c) => c,
+                Err(e) => return Message::err(400, &e.to_string()),
+            };
+            let abs = match fsops::resolve(root_abs, &clean) {
+                Ok(a) => a,
+                Err(e) => return Message::err(403, &e.to_string()),
+            };
+            let md = match std::fs::metadata(&abs) {
+                Ok(m) => m,
+                Err(e) => return Message::err(404, &e.to_string()),
+            };
+            if !md.file_type().is_file() {
+                return Message::err(400, "not a regular file");
+            }
+            let offset: u64 = get("offset").parse().unwrap_or(0);
+            let file = match std::fs::File::open(&abs) {
+                Ok(f) => f,
+                Err(e) => return Message::err(500, &e.to_string()),
+            };
+            use std::io::{Read as _, Seek as _, SeekFrom};
+            let mut file = file;
+            if offset > 0 {
+                if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                    return Message::err(500, &e.to_string());
+                }
+            }
+            let mut buf = vec![0u8; CHUNK as usize];
+            let n = match file.read(&mut buf) {
+                Ok(n) => n,
+                Err(e) => return Message::err(500, &e.to_string()),
+            };
+            buf.truncate(n);
+            let mut params = HashMap::new();
+            params.insert("size".to_string(), md.len().to_string());
+            params.insert("offset".to_string(), offset.to_string());
+            Message {
+                id: None,
+                typ: String::new(),
+                action: None,
+                params: Some(params),
+                data: buf,
+                meta: None,
+                error: None,
+                status: 200,
+            }
+        }
+        "write_chunk" => {
+            let clean = match fsops::clean_relative_path(get("path")) {
+                Ok(c) => c,
+                Err(e) => return Message::err(400, &e.to_string()),
+            };
+            let abs = match fsops::resolve(root_abs, &clean) {
+                Ok(a) => a,
+                Err(e) => return Message::err(403, &e.to_string()),
+            };
+            let offset: u64 = get("offset").parse().unwrap_or(0);
+            if let Some(parent) = std::path::Path::new(&abs).parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return Message::err(500, &e.to_string());
+                }
+            }
+            let mut file = match std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(offset == 0)
+                .open(&abs)
+            {
+                Ok(f) => f,
+                Err(e) => return Message::err(500, &e.to_string()),
+            };
+            use std::io::{Seek as _, SeekFrom, Write as _};
+            if offset > 0 {
+                if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                    return Message::err(500, &e.to_string());
+                }
+            }
+            match file.write_all(&req.data) {
+                Ok(()) => Message::ok(200, None),
+                Err(e) => Message::err(500, &e.to_string()),
+            }
+        }
+        "walk" => {
+            let clean = match fsops::clean_relative_path(get("path")) {
+                Ok(c) => c,
+                Err(e) => return Message::err(400, &e.to_string()),
+            };
+            let abs = match fsops::resolve(root_abs, &clean) {
+                Ok(a) => a,
+                Err(e) => return Message::err(403, &e.to_string()),
+            };
+            struct WalkItem {
+                rel: String,
+                is_dir: bool,
+                size: u64,
+            }
+            let mut items: Vec<WalkItem> = Vec::new();
+            let base = std::path::PathBuf::from(&abs);
+            let mut stack = vec![base.clone()];
+            while let Some(dir) = stack.pop() {
+                let entries = match std::fs::read_dir(&dir) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                for e in entries.flatten() {
+                    let path = e.path();
+                    let md = match std::fs::symlink_metadata(&path) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    };
+                    let rel = path
+                        .strip_prefix(&base)
+                        .map(|r| r.to_string_lossy().replace('\\', "/"))
+                        .unwrap_or_default();
+                    items.push(WalkItem { rel, is_dir: md.is_dir(), size: md.len() });
+                    if md.is_dir() {
+                        stack.push(path);
+                    }
+                }
+            }
+            let out: Vec<serde_json::Value> = items
+                .into_iter()
+                .map(|i| serde_json::json!({"path": i.rel, "is_dir": i.is_dir, "size": i.size}))
+                .collect();
+            Message::ok(200, Some(serde_json::json!({"items": out})))
+        }
         "thumb" => {
             let clean = match fsops::clean_relative_path(get("path")) {
                 Ok(c) => c,

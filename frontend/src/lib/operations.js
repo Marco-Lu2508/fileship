@@ -1,4 +1,6 @@
 import { apiFetch } from '../stores/auth.js'
+import { get } from 'svelte/store'
+import { activeAgentId } from '../stores/auth.js'
 import { requireOK, validName } from './files.js'
 import { t, translateError } from '../stores/i18n.js'
 
@@ -22,7 +24,12 @@ export function destinationPath(
   return normalized ? `${normalized}/${name}` : name
 }
 
-export async function transferFiles(paths, folder, mode, name = '') {
+export async function transferFiles(paths, folder, mode, name = '', dstAgentId = null) {
+  // cross-source transfer (server <-> agent): the backend streams the files
+  // through the server, so downloads/uploads are never buffered in the browser.
+  if (dstAgentId !== null && dstAgentId !== undefined) {
+    return transferFilesCross(paths, folder, mode, name, dstAgentId)
+  }
   if (!['copy', 'move'].includes(mode)) throw new Error(t('Invalid operation'))
   const results = []
   for (const src of topLevelPaths(paths)) {
@@ -39,6 +46,39 @@ export async function transferFiles(paths, folder, mode, name = '') {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ src, dst })
+        })
+      )
+      results.push({ path: src, ok: true })
+    } catch (error) {
+      results.push({
+        path: src,
+        ok: false,
+        error: translateError(error.message)
+      })
+    }
+  }
+  return results
+}
+
+export async function transferFilesCross(paths, folder, mode, name, dstAgentId) {
+  const srcAgentId = get(activeAgentId) || 0
+  const results = []
+  for (const src of topLevelPaths(paths)) {
+    try {
+      const dst = destinationPath(src, folder, paths.length === 1 && name ? name : undefined)
+      if (dst === src || dst.startsWith(src + '/'))
+        throw new Error(t('Choose a different destination'))
+      await requireOK(
+        await apiFetch('/api/transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            src_agent_id: srcAgentId,
+            src_path: src,
+            dst_agent_id: dstAgentId || 0,
+            dst_path: dst,
+            mode
+          })
         })
       )
       results.push({ path: src, ok: true })

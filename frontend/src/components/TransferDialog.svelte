@@ -4,7 +4,24 @@
   import Dialog from './Dialog.svelte'
   import Icon from './Icon.svelte'
   import Breadcrumb from './Breadcrumb.svelte'
-  import { apiFetch } from '../stores/auth.js'
+  import { apiFetch, activeAgentId } from '../stores/auth.js'
+  import { agents } from '../stores/sources.js'
+  import { get as storeGet } from 'svelte/store'
+  // destination device: null = same device as the current view,
+  // 0 = this server, >0 = remote agent. Cross-device transfers stream
+  // through the backend (/api/transfer), so it works server <-> agent.
+  let dstAgentId = null
+  const srcAgentId = () => storeGet(activeAgentId) || 0
+  const otherDevices = () =>
+    ($agents || []).filter((d) => d.id !== srcAgentId())
+  const dstHeaders = () =>
+    dstAgentId === null || dstAgentId === undefined
+      ? {}
+      : dstAgentId === 0
+        ? {}
+        : { 'X-Agent-ID': String(dstAgentId) }
+  const effectiveDst = () =>
+    dstAgentId === null || dstAgentId === undefined ? srcAgentId() : dstAgentId
   import { requireOK, validName } from '../lib/files.js'
   import { transferFiles, topLevelPaths } from '../lib/operations.js'
   export let paths = []
@@ -37,7 +54,7 @@
       await requireOK(
         await apiFetch('/api/files/mkdir', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...dstHeaders() },
           body: JSON.stringify({ path })
         })
       )
@@ -67,7 +84,10 @@
       })
       const data = await (
         await requireOK(
-          await apiFetch(`/api/files?${query}`, { signal: request.signal })
+          await apiFetch(`/api/files?${query}`, {
+            signal: request.signal,
+            headers: dstHeaders()
+          })
         )
       ).json()
       if (request.signal.aborted) return
@@ -90,7 +110,9 @@
     if (busy || loading) return
     busy = true
     issue = ''
-    const results = await transferFiles(items, folder, mode, name)
+    // same device: fast in-place op; different device: streamed /api/transfer
+    const crossDevice = dstAgentId !== null && dstAgentId !== undefined && effectiveDst() !== srcAgentId()
+    const results = await transferFiles(items, folder, mode, name, crossDevice ? effectiveDst() : null)
     const failed = results.filter((r) => !r.ok)
     await onComplete(results)
     busy = false
@@ -111,6 +133,25 @@
     {items.length}
     {$i18n('items selected. Existing files will not be overwritten.')}
   </p>
+  {#if otherDevices().length > 0 || srcAgentId() !== 0}
+    <label class="field"
+      >{$i18n('Destination')}<select
+        bind:value={dstAgentId}
+        disabled={busy}
+      >
+        <option value={null}>{$i18n('Same device (current view)')}</option>
+        <option value={0}>{$i18n('This server')}</option>
+        {#each otherDevices() as dev}
+          <option value={dev.id}>🖥️ {dev.name}{dev.online ? '' : ` (${$i18n('offline')})`}</option>
+        {/each}
+      </select></label
+    >
+    {#if dstAgentId !== null && effectiveDst() !== srcAgentId()}
+      <p class="dialog-hint">
+        {$i18n('Cross-device transfer: files stream through the server. Large files are supported.')}
+      </p>
+    {/if}
+  {/if}
   <Breadcrumb path={folder} onNavigate={(path) => !busy && browse(path)} />
   <form
     onsubmit={(e) => {

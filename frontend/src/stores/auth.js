@@ -147,8 +147,12 @@ export async function apiFetch(url, options = {}, retry = true) {
   headers.set('Authorization', `Bearer ${token}`)
   const agentId = get(activeAgentId)
   const sourceId = get(activeSourceId)
-  if (agentId) headers.set('X-Agent-ID', String(agentId))
-  else if (sourceId) headers.set('X-Source-ID', String(sourceId))
+  // An explicit X-Agent-ID header (options) wins over the ambient context —
+  // used by dialogs that act on a different source than the current view.
+  if (!headers.has('X-Agent-ID') && !headers.has('X-Source-ID')) {
+    if (agentId) headers.set('X-Agent-ID', String(agentId))
+    else if (sourceId) headers.set('X-Source-ID', String(sourceId))
+  }
   for (const [name, value] of Object.entries(csrfHeaders()))
     headers.set(name, value)
   const res = await fetch(url, {
