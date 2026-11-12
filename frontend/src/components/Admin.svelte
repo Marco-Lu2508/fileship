@@ -46,6 +46,20 @@
     if (res.ok) audit = (await res.json()) ?? []
   }
 
+  async function downloadDbBackup() {
+    try {
+      const res = await apiFetch('/api/admin/backup/db')
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'fileship-backup.db'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
+
   async function loadStats() {
     statsLoading = true
     statsError = ''
@@ -565,6 +579,9 @@
           <h3>
             {$i18n('Audit Log')} <span class="count-badge">{audit.length}</span>
           </h3>
+          <button class="btn-icon" onclick={downloadDbBackup} title={$i18n('Download database backup')}
+            ><Icon name="download" size={14} /></button
+          >
           <button class="btn-icon" onclick={loadAudit} title={$i18n('Reload')}
             ><Icon name="refresh" size={14} /></button
           >

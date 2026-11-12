@@ -39,6 +39,13 @@ impl Db {
         Ok(db)
     }
 
+    /// Write a consistent standalone copy of the DB to `file` (VACUUM INTO).
+    pub fn vacuum_into(&self, file: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("VACUUM INTO ?", [file])?;
+        Ok(())
+    }
+
     fn exec(&self, sql: &str, p: impl rusqlite::Params) -> Result<usize, rusqlite::Error> {
         self.conn.lock().unwrap().execute(sql, p)
     }
@@ -60,6 +67,7 @@ impl Db {
         self.migrate_sources()?;
         self.migrate_agents()?;
         self.migrate_totp()?;
+        self.migrate_oidc()?;
         Ok(())
     }
 
@@ -116,6 +124,17 @@ impl Db {
             CREATE INDEX IF NOT EXISTS idx_file_index_name ON file_index(user_id, name);
             CREATE INDEX IF NOT EXISTS idx_file_index_dir ON file_index(user_id, is_dir);
             CREATE TABLE IF NOT EXISTS dir_size_cache (root_path TEXT PRIMARY KEY, size_bytes INTEGER NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL);
+            CREATE VIRTUAL TABLE IF NOT EXISTS file_index_fts USING fts5(name, rel_path, content='file_index', content_rowid='id');
+            CREATE TRIGGER IF NOT EXISTS file_index_fts_ai AFTER INSERT ON file_index BEGIN
+                INSERT INTO file_index_fts(rowid, name, rel_path) VALUES (new.id, new.name, new.rel_path);
+            END;
+            CREATE TRIGGER IF NOT EXISTS file_index_fts_ad AFTER DELETE ON file_index BEGIN
+                INSERT INTO file_index_fts(file_index_fts, rowid, name, rel_path) VALUES('delete', old.id, old.name, old.rel_path);
+            END;
+            CREATE TRIGGER IF NOT EXISTS file_index_fts_au AFTER UPDATE ON file_index BEGIN
+                INSERT INTO file_index_fts(file_index_fts, rowid, name, rel_path) VALUES('delete', old.id, old.name, old.rel_path);
+                INSERT INTO file_index_fts(rowid, name, rel_path) VALUES (new.id, new.name, new.rel_path);
+            END;
             ",
         )
     }
@@ -174,6 +193,40 @@ impl Db {
             CREATE INDEX IF NOT EXISTS idx_agent_devices_user ON agent_devices(user_id);
             ",
         )
+    }
+
+    fn migrate_oidc(&self) -> Result<(), rusqlite::Error> {
+        self.exec_batch(
+            "
+            CREATE TABLE IF NOT EXISTS oidc_links (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, sub TEXT NOT NULL UNIQUE, email TEXT NOT NULL DEFAULT '', created_at DATETIME NOT NULL);
+            CREATE INDEX IF NOT EXISTS idx_oidc_links_user ON oidc_links(user_id);
+            ",
+        )
+    }
+
+    pub fn get_user_by_oidc_sub(&self, sub: &str) -> Option<crate::model::User> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare_cached("SELECT u.id, u.username, u.password_hash, u.is_admin, u.root_path FROM users u JOIN oidc_links l ON l.user_id = u.id WHERE l.sub = ?")
+            .ok()?;
+        let row = stmt.query_row(params![sub], |r| {
+            Ok(crate::model::User {
+                id: r.get(0)?,
+                username: r.get(1)?,
+                password_hash: r.get(2)?,
+                is_admin: bb(r.get::<_, i64>(3)?),
+                root_path: r.get(4)?,
+                created_at: Local::now(),
+            })
+        });
+        row.ok()
+    }
+
+    pub fn link_oidc(&self, user_id: i64, sub: &str, email: &str) {
+        let _ = self.exec(
+            "INSERT INTO oidc_links (user_id, sub, email, created_at) VALUES (?,?,?,?)",
+            params![user_id, sub, email, fmt_db_time(&Local::now())],
+        );
     }
 
     fn migrate_totp(&self) -> Result<(), rusqlite::Error> {
@@ -993,10 +1046,53 @@ impl Db {
 
     // ── Index ──────────────────────────────────────────
 
+    fn index_search_fts(
+        conn: &Connection,
+        user_id: i64,
+        fts_query: &str,
+        limit: i64,
+    ) -> Option<Vec<FileInfo>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT f.rel_path, f.name, f.is_dir, f.size, f.mod_time, f.mime_type FROM file_index f JOIN file_index_fts ft ON ft.rowid = f.id WHERE f.user_id = ? AND ft MATCH ? ORDER BY ft.rank, f.is_dir DESC, f.name ASC LIMIT ?",
+            )
+            .ok()?;
+        let rows = stmt
+            .query_map(params![user_id, fts_query, limit], |r| {
+                Ok(FileInfo {
+                    path: r.get(0)?,
+                    name: r.get(1)?,
+                    is_dir: bb(r.get::<_, i64>(2)?),
+                    size: r.get(3)?,
+                    mod_time: req_time(r.get::<_, String>(4)?),
+                    mime_type: r.get(5)?,
+                    dir_size: 0,
+                    starred: false,
+                })
+            })
+            .ok()?;
+        Some(rows.filter_map(|r| r.ok()).collect())
+    }
+
     pub fn index_search(&self, user_id: i64, query: &str, limit: i64) -> Vec<FileInfo> {
         let limit = if limit <= 0 { 200 } else { limit };
-        let pattern = format!("%{}%", query.to_lowercase());
         let conn = self.conn.lock().unwrap();
+
+        // FTS5 full-text search (prefix match on every token); falls back to
+        // LIKE when the query has no searchable tokens.
+        let fts_query: String = query
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .filter(|tok| !tok.is_empty())
+            .map(|tok| format!("\"{}\"*", tok.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+
+        if !fts_query.is_empty() {
+            if let Some(res) = Self::index_search_fts(&conn, user_id, &fts_query, limit) {
+                return res;
+            }
+        }
+        let pattern = format!("%{}%", query.to_lowercase());
         let mut stmt = conn
             .prepare_cached(
                 "SELECT rel_path, name, is_dir, size, mod_time, mime_type FROM file_index WHERE user_id = ? AND LOWER(name) LIKE ? ORDER BY is_dir DESC, name ASC LIMIT ?",

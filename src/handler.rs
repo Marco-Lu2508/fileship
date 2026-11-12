@@ -15,6 +15,8 @@ use std::path::Path;
 use std::sync::Arc;
 use sha2::Digest as _;
 
+pub use crate::oidc::{oidc_callback, oidc_config, oidc_login};
+
 #[derive(Clone)]
 pub struct AppState {
     pub cfg: crate::config::Config,
@@ -27,11 +29,11 @@ pub struct AppState {
     pub proxies: Arc<crate::middleware::ProxyCfg>,
 }
 
-fn err(status: StatusCode, msg: &str) -> Response {
+pub fn err(status: StatusCode, msg: &str) -> Response {
     err_resp(status, msg)
 }
 
-fn json<T: serde::Serialize>(status: StatusCode, v: &T) -> Response {
+pub fn json<T: serde::Serialize>(status: StatusCode, v: &T) -> Response {
     json_resp(status, v)
 }
 
@@ -48,6 +50,9 @@ pub fn router(_state: AppState) -> Router<AppState> {
     let public = Router::new()
         .route("/healthz", get(healthz))
         .route("/api/auth/login", post(login))
+        .route("/api/auth/oidc/config", get(oidc_config))
+        .route("/api/auth/oidc/login", get(oidc_login))
+        .route("/api/auth/oidc/callback", get(oidc_callback))
         .route("/api/auth/refresh", post(refresh))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/2fa/verify", post(two_fa_verify))
@@ -68,6 +73,8 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/api/files/copy", post(copy_file))
         .route("/api/files/download", get(download_file))
         .route("/api/files/preview", get(preview_file))
+        .route("/api/files/zip-preview", get(zip_preview))
+        .route("/api/files/zip-entry", get(zip_entry))
         .route("/api/files/zip-multi", post(zip_multi))
         .route("/api/files/archive", post(download_archive))
         .route("/api/files/zip", get(zip_dir))
@@ -98,6 +105,7 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/api/me/2fa", delete(two_fa_disable))
         .route("/api/me/2fa/status", get(two_fa_status));
 
+    // Admin routes need auth first (inserts AuthCtx), then the admin check.
     let admin = Router::new()
         .route("/api/users", get(list_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user).patch(update_user))
@@ -105,14 +113,53 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/api/audit", get(audit_log))
         .route("/api/stats", get(stats))
         .route("/api/users/{id}/permissions", get(list_permissions).post(set_permission))
-        .route("/api/permissions/{pid}", delete(delete_permission));
+        .route("/api/permissions/{pid}", delete(delete_permission))
+        .route("/api/admin/backup/db", get(db_backup))
+        .route_layer(axum::middleware::from_fn(crate::middleware::admin_mw))
+        .route_layer(axum::middleware::from_fn(crate::middleware::auth_mw));
 
     private
         .route_layer(axum::middleware::from_fn(crate::middleware::agent_route_mw))
         .route_layer(axum::middleware::from_fn(crate::middleware::auth_mw))
-        .merge(admin.route_layer(axum::middleware::from_fn(crate::middleware::admin_mw)))
+        .merge(admin)
         .merge(public)
         .layer(axum::middleware::from_fn(crate::middleware::rate_limit_mw))
+}
+
+/// Download a consistent SQLite copy of the database (admin only).
+async fn db_backup(State(state): State<AppState>, _auth: Auth) -> Response {
+    let fname = format!(
+        "fileship-backup-{}.db",
+        chrono::Local::now().format("%Y%m%d-%H%M%S")
+    );
+    let tmp = std::env::temp_dir().join(fname.clone());
+    let tmp_str = tmp.to_string_lossy().to_string();
+    let state2 = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        state2.db.vacuum_into(&tmp_str).map(|()| {
+            let bytes = std::fs::read(&tmp_str).unwrap_or_default();
+            let _ = std::fs::remove_file(&tmp_str);
+            bytes
+        })
+    })
+    .await;
+    match result {
+        Ok(Ok(bytes)) if !bytes.is_empty() => {
+            let mut res = Response::new(Body::from(bytes));
+            *res.status_mut() = StatusCode::OK;
+            res.headers_mut().insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("application/octet-stream"),
+            );
+            res.headers_mut().insert(
+                axum::http::header::CONTENT_DISPOSITION,
+                axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}\"", fname))
+                    .unwrap_or_else(|_| axum::http::HeaderValue::from_static("attachment")),
+            );
+            res
+        }
+        _ => err(StatusCode::INTERNAL_SERVER_ERROR, "database backup failed"),
+    }
 }
 
 // ── Helpers ─────────────────────────────────────────────
@@ -1593,6 +1640,100 @@ async fn preview_file(State(state): State<AppState>, req: Request<Body>) -> Resp
         ],
         &req,
     )
+}
+
+/// List the entries of a ZIP archive without extracting it.
+async fn zip_preview(State(state): State<AppState>, req: Request<Body>) -> Response {
+    let q = query_map(&req);
+    let rel = match fsops::clean_relative_path(q.get("path").map(|s| s.as_str()).unwrap_or("")) {
+        Ok(r) => r,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "file path required"),
+    };
+    if let Err(r) = check_perm(&state, &req, &rel, "read") {
+        return r;
+    }
+    let root = user_root(&state, &req);
+    let abs = match fsops::resolve(&root, &rel) {
+        Ok(a) => a,
+        Err(_) => return err(StatusCode::FORBIDDEN, "forbidden"),
+    };
+    let file = match std::fs::File::open(&abs) {
+        Ok(f) => f,
+        Err(_) => return err(StatusCode::NOT_FOUND, "not found"),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "not a valid zip archive"),
+    };
+    let mut entries = Vec::new();
+    for i in 0..archive.len() {
+        let f = match archive.by_index(i) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        entries.push(serde_json::json!({
+            "name": f.name().unwrap_or_default(),
+            "size": f.size(),
+            "compressed_size": f.compressed_size(),
+            "is_dir": f.is_dir(),
+        }));
+    }
+    json(StatusCode::OK, &entries)
+}
+
+/// Stream a single entry out of a ZIP archive.
+async fn zip_entry(State(state): State<AppState>, req: Request<Body>) -> Response {
+    let q = query_map(&req);
+    let rel = match fsops::clean_relative_path(q.get("path").map(|s| s.as_str()).unwrap_or("")) {
+        Ok(r) => r,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "file path required"),
+    };
+    let want = match q.get("entry") {
+        Some(e) if !e.is_empty() => e.clone(),
+        _ => return err(StatusCode::BAD_REQUEST, "entry required"),
+    };
+    if let Err(r) = check_perm(&state, &req, &rel, "read") {
+        return r;
+    }
+    let root = user_root(&state, &req);
+    let abs = match fsops::resolve(&root, &rel) {
+        Ok(a) => a,
+        Err(_) => return err(StatusCode::FORBIDDEN, "forbidden"),
+    };
+    let file = match std::fs::File::open(&abs) {
+        Ok(f) => f,
+        Err(_) => return err(StatusCode::NOT_FOUND, "not found"),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "not a valid zip archive"),
+    };
+    let data = match archive.by_name(&want) {
+        Ok(mut f) => {
+            use std::io::Read as _;
+            let mut buf = Vec::new();
+            match f.read_to_end(&mut buf) {
+                Ok(_) => buf,
+                Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "read failed"),
+            }
+        }
+        Err(_) => return err(StatusCode::NOT_FOUND, "entry not found"),
+    };
+    let base = want.rsplit('/').next().unwrap_or(&want);
+    let mut res = Response::new(Body::from(data));
+    let disp = format!("attachment; filename=\"{}\"", base.replace('"', ""));
+    res.headers_mut().insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        match axum::http::HeaderValue::from_str(&disp) {
+            Ok(v) => v,
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "bad filename"),
+        },
+    );
+    res.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/octet-stream"),
+    );
+    res
 }
 
 async fn stream_transcoded(abs: &str, _root: &str, _rel: &str) -> Response {

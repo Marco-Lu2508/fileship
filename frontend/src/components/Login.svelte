@@ -14,6 +14,19 @@
   let errorMsg = ''
   let loading = false
   let showPw = false
+  let oidcEnabled = false
+  const ssoError = sessionStorage.getItem('sso_error')
+  if (ssoError) errorMsg = ssoError
+  if (ssoError) sessionStorage.removeItem('sso_error')
+
+  async function checkOidc() {
+    try {
+      const res = await fetch('/api/auth/oidc/config')
+      const data = await res.json()
+      oidcEnabled = !!data.enabled
+    } catch {}
+  }
+  checkOidc()
 
   async function handleSubmit() {
     if (loading) return
@@ -180,12 +193,61 @@
         </button>
       {/if}
     </form>
+    {#if oidcEnabled && !is2FAStep}
+      <div class="sso-wrap">
+        <div class="sso-divider"><span>{$i18n('or')}</span></div>
+        <a class="sso-btn" href="/api/auth/oidc/login">
+          <Icon name="user" size={16} /> {$i18n('Sign in with SSO')}
+        </a>
+      </div>
+    {/if}
   </div>
 
   <p class="footer-note">{$i18n('A home for everything you’re working on.')}</p>
 </div>
 
 <style>
+  .sso-wrap {
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sso-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .sso-divider::before,
+  .sso-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .sso-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: var(--transition);
+  }
+  .sso-btn:hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  }
   .login-language {
     display: flex;
     align-items: center;

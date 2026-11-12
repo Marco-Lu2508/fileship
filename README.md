@@ -20,6 +20,10 @@ A self-hosted file browser + manager with WebDAV, file sharing, favorites, HTTP 
 - 🌐 HTTP/1.1 + HTTP/2 + HTTP/3 on one port (h3 when TLS is enabled)
 - 🔌 WebDAV support at `/webdav`
 - 🤖 Agent filesystem with WebSocket agent protocol
+- 🔍 Full-text search (FTS5, prefix-ranked)
+- 📦 ZIP archive preview (browse + download entries without extracting)
+- 🔑 OIDC / SSO login (Keycloak, Authelia, Google, GitHub, … — PKCE, auto-provisioning, 2FA respected)
+- 🗄️ One-click database backup (consistent SQLite export, admin menu)
 
 ## 🌐 Live Demo
 

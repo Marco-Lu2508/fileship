@@ -111,7 +111,7 @@ export async function refreshTokens() {
   return promise
 }
 
-function setTokens({ access_token, refresh_token }, newSession = true) {
+export function setTokens({ access_token, refresh_token }, newSession = true) {
   if (newSession) sessionVersion++
   localStorage.setItem('access_token', access_token)
   localStorage.setItem('refresh_token', refresh_token)
@@ -166,4 +166,32 @@ export async function apiFetch(url, options = {}, retry = true) {
     }
   }
   return res
+}
+
+// Handle the OIDC redirect back from the provider.
+// Backend redirects to /?access_token=..&refresh_token=.. (or ?sso_pending=..
+// for 2FA, ?sso_error=.. on failure). Returns an error string or null.
+export function handleSsoCallback() {
+  const params = new URLSearchParams(window.location.search)
+  const accessTokenParam = params.get('access_token')
+  const refreshTokenParam = params.get('refresh_token')
+  const pending = params.get('sso_pending')
+  const errParam = params.get('sso_error')
+  if (!accessTokenParam && !pending && !errParam) return null
+  params.delete('access_token')
+  params.delete('refresh_token')
+  params.delete('sso_pending')
+  params.delete('sso_error')
+  const qs = params.toString()
+  window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash)
+  if (accessTokenParam && refreshTokenParam) {
+    setTokens({ access_token: accessTokenParam, refresh_token: refreshTokenParam })
+    fetchMe().catch(() => {})
+    return null
+  }
+  if (pending) {
+    twoFAPending.set({ pending_token: pending })
+    return null
+  }
+  return errParam || 'SSO login failed'
 }

@@ -245,6 +245,23 @@
     mime.startsWith('audio/') ||
     ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'flac'].includes(extension)
   $: isPdf = mime.includes('pdf') || extension === 'pdf'
+  $: isZip = extension === 'zip'
+  let zipEntries = []
+  let zipLoading = false
+
+  $: if (isZip && file?.path) {
+    zipLoading = true
+    apiFetch(`/api/files/zip-preview?path=${encodeURIComponent(file.path)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        zipEntries = Array.isArray(data) ? data : []
+        zipLoading = false
+      })
+      .catch(() => {
+        zipEntries = []
+        zipLoading = false
+      })
+  }
   $: isText =
     mime.startsWith('text/') ||
     [
@@ -623,6 +640,28 @@
                 </div>
               {/if}
             </div>
+          {:else if isZip}
+            <div class="zip-list">
+              <h4>{$i18n('Archive contents')} ({zipEntries.length})</h4>
+              {#if zipLoading}<p class="zip-msg">{$i18n('Loading…')}</p>
+              {:else if zipEntries.length === 0}<p class="zip-msg">{$i18n('Empty or unreadable archive')}</p>
+              {:else}
+                <ul>
+                  {#each zipEntries as e}
+                    <li>
+                      <span class="zip-name">{e.is_dir ? '📁' : '📄'} {e.name}</span>
+                      {#if !e.is_dir}
+                        <a
+                          class="zip-dl"
+                          href={`/api/files/zip-entry?path=${encodeURIComponent(file.path)}&entry=${encodeURIComponent(e.name)}&access_token=${token}${sourceSuffix}`}
+                          download
+                        >{$i18n('Download')}</a>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
           {:else if isPdf}
             <iframe src={previewUrl} title={file.name}></iframe>
           {:else if isText}
@@ -939,6 +978,41 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .zip-list {
+    padding: 1rem;
+    max-height: 100%;
+    overflow: auto;
+  }
+  .zip-list h4 {
+    margin: 0 0 0.75rem;
+  }
+  .zip-msg {
+    color: var(--text-muted);
+  }
+  .zip-list ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .zip-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.25rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .zip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .zip-dl {
+    color: var(--accent);
+    text-decoration: none;
+    flex-shrink: 0;
   }
   .video-stage {
     /* Width is limited by both the container and the height budget, so the

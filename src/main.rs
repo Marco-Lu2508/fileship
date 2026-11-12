@@ -10,6 +10,7 @@ mod h3server;
 mod hub;
 mod middleware;
 mod model;
+mod oidc;
 mod static_fs;
 mod webdav;
 
