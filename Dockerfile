@@ -2,7 +2,7 @@
 # Multi-stage: Build mit LTO/fat-Profil, Runtime minimal (distroless-ish).
 
 # ── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM rust:1.85-slim-bookworm AS build
+FROM rust:1.90-slim-bookworm AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config libsqlite3-dev \
