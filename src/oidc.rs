@@ -250,8 +250,11 @@ pub async fn oidc_callback(State(state): State<AppState>, req: Request<Body>) ->
     };
     let sub = claims.subject().to_string();
     let email = claims.email().map(|e| e.to_string()).unwrap_or_default();
+    // Only trust the email for linking/privileges when the IdP verified it —
+    // otherwise anyone could claim someone else's address at a lax IdP.
+    let email_verified = claims.email_verified().unwrap_or(false);
 
-    let user = match resolve_user(&state, &sub, &email) {
+    let user = match resolve_user(&state, &sub, &email, email_verified) {
         Ok(u) => u,
         Err(msg) => return sso_error(&msg),
     };
@@ -276,12 +279,12 @@ fn admin_emails() -> Vec<String> {
         .collect()
 }
 
-fn resolve_user(state: &AppState, sub: &str, email: &str) -> Result<crate::model::User, String> {
+fn resolve_user(state: &AppState, sub: &str, email: &str, email_verified: bool) -> Result<crate::model::User, String> {
     if let Some(u) = state.db.get_user_by_oidc_sub(sub) {
         return Ok(u);
     }
-    // Link by email-as-username if that account exists.
-    if !email.is_empty() {
+    // Link by email-as-username if that account exists (verified emails only).
+    if !email.is_empty() && email_verified {
         if let Some(u) = state.db.get_user_by_username(email) {
             state.db.link_oidc(u.id, sub, email);
             return Ok(u);
@@ -304,7 +307,8 @@ fn resolve_user(state: &AppState, sub: &str, email: &str) -> Result<crate::model
     } else {
         base
     };
-    let is_admin = !email.is_empty() && admin_emails().contains(&email.to_lowercase());
+    // Admin promotion only for verified addresses, too.
+    let is_admin = !email.is_empty() && email_verified && admin_emails().contains(&email.to_lowercase());
     let mut username = base.clone();
     let mut n = 1;
     loop {

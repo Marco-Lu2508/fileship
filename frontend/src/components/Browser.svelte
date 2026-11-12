@@ -57,6 +57,67 @@
     uploadDragging = false,
     selectionAnchor = null
   let archivePaths = null
+  // Dockhand-style system entries: server + sources + agents as one list.
+  const currentSystemId = () => {
+    if ($activeAgentId) return 'agent:' + $activeAgentId
+    if ($activeSourceId) return 'src:' + $activeSourceId
+    return 'local'
+  }
+  const sysEntries = () => {
+    const out = [
+      {
+        id: 'local',
+        kind: 'local',
+        name: $i18n('This server'),
+        sub: $i18n('Local storage'),
+        online: true,
+        icon: 'save',
+        agent: null,
+        source: null
+      }
+    ]
+    for (const src of $sources || []) {
+      out.push({
+        id: 'src:' + src.id,
+        kind: 'source',
+        name: src.name,
+        sub: src.path || $i18n('Mounted volume'),
+        online: true,
+        icon: 'folder',
+        agent: null,
+        source: src
+      })
+    }
+    for (const dev of $agents || []) {
+      out.push({
+        id: 'agent:' + dev.id,
+        kind: 'agent',
+        name: dev.name,
+        sub: dev.hostname || dev.os_info || dev.root_path || $i18n('Remote agent'),
+        online: !!dev.online,
+        icon: 'webdav',
+        agent: dev,
+        source: null
+      })
+    }
+    return out
+  }
+  function selectSystem(entry) {
+    if (entry.kind === 'agent') {
+      if (!entry.online) return
+      selectRemoteAgent(entry.agent.id)
+    } else {
+      selectLocalWorkspace(entry.source?.id ?? null)
+    }
+    navigateTo('')
+  }
+  function sysStatusText(entry) {
+    if (entry.kind === 'agent') {
+      return entry.online ? $i18n('Online') : $i18n('Offline')
+    }
+    return $i18n('Local')
+  }
+
   function selectFile(file, event) {
     selected.update((current) => {
       const next = new Set(current)
@@ -649,48 +710,34 @@
         >{:else}<p class="favorites-hint">
           {$i18n('Star a file or folder to keep it close.')}
         </p>{/each}
+      <!-- Systems (Dockhand-style): one entry per target — server, volumes, agents.
+           With no remote systems this section stays hidden, exactly like before. -->
       {#if $agents.length > 0 || $sources.length > 0}
-        <span class="nav-label favorites-label">Devices & Sources</span>
-        <button
-          class="nav-item favorite-link"
-          class:active={!$activeAgentId && !$activeSourceId}
-          onclick={() => {
-            selectLocalWorkspace(null)
-            navigateTo('')
-          }}
-        >
-          <Icon name="save" size={16} /><span>Local Server</span>
-        </button>
-        {#each $sources as src (src.id)}
+        <span class="nav-label favorites-label">Systems</span>
+        {#each sysEntries() as entry (entry.id)}
           <button
-            class="nav-item favorite-link"
-            class:active={!$activeAgentId && $activeSourceId === src.id}
-            onclick={() => {
-              selectLocalWorkspace(src.id)
-              navigateTo('')
-            }}
+            class="nav-item system-entry"
+            class:active={currentSystemId() === entry.id}
+            class:offline={!entry.online}
+            disabled={!entry.online}
+            title={entry.sub}
+            onclick={() => selectSystem(entry)}
           >
-            <Icon name="folder" size={16} /><span>{src.name}</span>
+            <span class="sys-icon"><Icon name={entry.icon} size={16} /></span>
+            <span class="sys-copy">
+              <span class="sys-name">{entry.name}</span>
+              <span class="sys-sub">{entry.sub}</span>
+            </span>
+            <span
+              class="sys-dot"
+              class:online={entry.online}
+              title={sysStatusText(entry)}
+            ></span>
           </button>
         {/each}
-        {#each $agents as dev (dev.id)}
-          <button
-            class="nav-item favorite-link"
-            class:active={$activeAgentId === dev.id}
-            disabled={!dev.online}
-            title={dev.online
-              ? `${dev.hostname || dev.name} (Online)`
-              : `${dev.name} (Offline)`}
-            onclick={() => {
-              selectRemoteAgent(dev.id)
-              navigateTo('')
-            }}
-          >
-            <Icon name="webdav" size={16} /><span
-              >{dev.online ? '🟢' : '⚪'} {dev.name}</span
-            >
-          </button>
-        {/each}
+        <p class="systems-hint">
+          {$i18n('Add systems in Settings → Remote Devices & Sources.')}
+        </p>
       {/if}
     </nav>
     <div class="sidebar-bottom">
@@ -1395,6 +1442,90 @@
     background: var(--sidebar-hover);
     color: white;
   }
+  .system-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+  }
+  .system-entry.active {
+    background: linear-gradient(
+      135deg,
+      var(--accent-grad, var(--accent)),
+      var(--accent)
+    );
+    color: var(--on-accent, #fff);
+  }
+  .system-entry.active .sys-sub {
+    color: inherit;
+    opacity: 0.85;
+  }
+  .system-entry.active .sys-dot {
+    background: #fff;
+  }
+  .system-entry.offline {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .sys-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+  .system-entry.active .sys-icon {
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+  }
+  .sys-copy {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .sys-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .sys-sub {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .sys-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .sys-dot.online {
+    background: #2ecc71;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #2ecc71 20%, transparent);
+  }
+  .systems-hint {
+    margin: 6px 12px 2px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+
   .nav-item.active {
     background: var(--sidebar-active);
     color: var(--sidebar-on-active);

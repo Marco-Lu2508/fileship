@@ -498,6 +498,10 @@ async fn two_fa_verify(State(state): State<AppState>, req: Request<Body>) -> Res
     if !enabled {
         return err(StatusCode::BAD_REQUEST, "2FA not enabled");
     }
+    // Per-attempt limiter: codes are 6 digits, a pending token lives 5 min.
+    if !state.login_limiter.allow(&format!("2fa:{}", claims.user_id)) {
+        return err(StatusCode::TOO_MANY_REQUESTS, "too many code attempts, please try again later");
+    }
     let ok = crate::auth::verify_totp(&secret, &body.code) || state.db.totp_use_backup_code(claims.user_id, &body.code);
     if !ok {
         return err(StatusCode::UNAUTHORIZED, "invalid 2FA code");
@@ -893,7 +897,7 @@ async fn read_multipart(req: Request<Body>, max_total: i64, max_files: usize) ->
     let mut fields: HashMap<String, String> = HashMap::new();
     let mut files: Vec<SpooledFile> = Vec::new();
     let mut total: i64 = 0;
-    // multipart-Parsing via axum::extract::Multipart ist async; hier hand-parsen:
+    // hand-parse as chunks (axum's Multipart cannot stream to disk):
     // (axum multipart doesn't allow streaming to file — we parse from the buffer,
     //  in chunks, but spool each file part to a temp file.)
     let mut mp = MultipartParser::new(&body, &boundary);

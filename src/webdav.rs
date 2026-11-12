@@ -433,7 +433,7 @@ fn dav_move_copy(root: &str, name: &str, req: &Request<Body>, is_move: bool) -> 
         Some(d) => d.to_string(),
         None => return err_resp(StatusCode::BAD_REQUEST, "missing destination"),
     };
-    // Destination: volle URL oder Pfad — Pfadteil extrahieren
+    // Destination may be a full URL or a path — extract the path part
     let dest_path = if let Some(idx) = dest.find("/webdav") {
         dest[idx..].to_string()
     } else {
