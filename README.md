@@ -17,9 +17,11 @@ A self-hosted file browser + manager with WebDAV, file sharing, favorites, HTTP 
 - 🔗 Public share links with optional password and expiry
 - ⭐ Favorites, 🗑️ Trash with automatic expiry (`TRASH_RETENTION_DAYS`, default 30)
 - 📱 PWA: installable, offline app shell (service worker caches assets only, never the API)
+- 🎬 Video player remembers your playback position per file
 - 🌐 HTTP/1.1 + HTTP/2 + HTTP/3 on one port (h3 when TLS is enabled)
 - 🔌 WebDAV support at `/webdav`
 - 🤖 Agent filesystem with WebSocket agent protocol
+- 🔀 Copy/move between server and remote agents (server ↔ agent ↔ agent), streamed in 4 MiB chunks
 - 🔍 Full-text search (FTS5, prefix-ranked)
 - 📦 ZIP archive preview (browse + download entries without extracting)
 - 🔑 OIDC / SSO login (Keycloak, Authelia, Google, GitHub, … — PKCE, auto-provisioning, 2FA respected)
@@ -75,6 +77,16 @@ fileship --agent --server ws://host:8080/api/agent/ws --token <token>
 ```
 
 The agent binary is the same executable — it registers with the server and can e.g. provide transcoding/WebDAV on remote hosts.
+
+**Cross-server transfer:** create the device in **Settings → Remote Devices**, run the agent on
+the target machine, then copy/move files and folders between the server and the agent — and
+between agents — via the destination picker in the copy/move dialog. Transfers stream through
+the server in 4 MiB chunks (`POST /api/transfer`), so arbitrarily large files work without
+buffering in RAM; "move" deletes the source after a successful copy.
+
+**Browsing:** the sidebar device switcher shows the agent's filesystem in the web UI (files,
+previews, thumbnails and text editing all work, proxied over the agent WebSocket). The agent
+connects outbound — no inbound ports needed.
 
 ## 🎨 Design & Themes
 
