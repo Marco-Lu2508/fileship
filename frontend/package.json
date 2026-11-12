@@ -6,7 +6,6 @@
     "dev": "vite",
     "locales": "node ../scripts/build-locales.mjs",
     "build": "npm run locales && vite build",
-    "build:embedded": "npm run build && node ../scripts/sync-frontend.mjs",
     "preview": "vite preview",
     "check": "svelte-check",
     "test": "node --test tests/*.test.js"

@@ -1,14 +1,14 @@
+CARGO=cargo
 BINARY=fileship
-GO=go
 NPM=npm
 
-.PHONY: all dev build build-frontend build-backend clean docker docker-up
+.PHONY: all dev build build-frontend build-backend test clean docker docker-up
 
 all: build
 
 ## Entwicklung
 dev-backend:
-	ROOT_PATH=./data DB_PATH=./fileship.db $(GO) run ./cmd/fileship
+	ROOT_PATH=./data DB_PATH=./fileship.db $(CARGO) run
 
 dev-frontend:
 	cd frontend && $(NPM) run dev
@@ -20,7 +20,10 @@ build-frontend:
 	cd frontend && $(NPM) ci && $(NPM) run build
 
 build-backend:
-	CGO_ENABLED=1 $(GO) build -ldflags="-s -w" -o $(BINARY) ./cmd/fileship
+	$(CARGO) build --release
+
+test:
+	$(CARGO) test --release --all-targets
 
 ## Docker
 docker:
@@ -34,6 +37,5 @@ docker-down:
 
 ## Cleanup
 clean:
-	rm -f $(BINARY)
-	rm -rf frontend/dist
-	rm -f fileship.db
+	rm -f $(BINARY) fileship.db
+	rm -rf target frontend/dist

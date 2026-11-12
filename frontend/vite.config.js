@@ -10,6 +10,23 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    target: 'es2022',
+    reportCompressedSize: false,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        // Vendor-Code separat cachen (immutable, hashbasiert)
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/svelte') ||
+            id.includes('marked') ||
+            id.includes('dompurify')
+          ) {
+            return 'vendor'
+          }
+        }
+      }
+    }
   }
 })

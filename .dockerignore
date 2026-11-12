@@ -1,11 +1,11 @@
 .git
 .env
 **/node_modules
-frontend/dist
-internal/static/dist
+target
 data
 *.db
 *.db-shm
 *.db-wal
 fileship
 *.exe
+Dockerfile*

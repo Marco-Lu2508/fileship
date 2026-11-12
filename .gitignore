@@ -7,3 +7,8 @@ data/
 frontend/node_modules/
 *.db-shm
 *.db-wal
+
+# Rust
+/target
+fileship.db*
+/data

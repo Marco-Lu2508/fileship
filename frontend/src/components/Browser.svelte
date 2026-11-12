@@ -22,12 +22,9 @@
   import Breadcrumb from './Breadcrumb.svelte'
   import Dropzone from './Dropzone.svelte'
   import FileRow from './FileRow.svelte'
-  import Preview from './Preview.svelte'
   import ShareDialog from './ShareDialog.svelte'
   import Toast from './Toast.svelte'
   import Skeleton from './Skeleton.svelte'
-  import Editor from './Editor.svelte'
-  import Settings from './Settings.svelte'
   import ThemePicker from './ThemePicker.svelte'
   import Trash from './Trash.svelte'
   import Icon from './Icon.svelte'
@@ -141,6 +138,20 @@
     tableWrap,
     uploader,
     reindexTimeout
+  // Preview/Editor/Settings (~3.800 LOC zusammen) lazy laden — nur wenn
+  // der User sie erstmals oeffnet. Spart ~40% des initialen JS-Bundles.
+  let PreviewComp = null,
+    EditorComp = null,
+    SettingsComp = null
+  $: if (previewFile && !PreviewComp) {
+    import('./Preview.svelte').then((m) => (PreviewComp = m.default))
+  }
+  $: if (editorFile && !EditorComp) {
+    import('./Editor.svelte').then((m) => (EditorComp = m.default))
+  }
+  $: if (showSettings && !SettingsComp) {
+    import('./Settings.svelte').then((m) => (SettingsComp = m.default))
+  }
   let previewFile = null,
     shareFile = null,
     editorFile = null
@@ -1149,18 +1160,22 @@
     </div>
   </main>
 </div>
-<Preview
-  file={previewFile}
-  siblings={sorted.filter((f) => !f.is_dir)}
-  onNavigate={(f) => (previewFile = f)}
-  onClose={() => (previewFile = null)}
-/><ShareDialog file={shareFile} onClose={() => (shareFile = null)} /><Editor
-  file={editorFile}
-  onClose={() => (editorFile = null)}
-/>
-{#if showSettings}<Settings
-    onClose={() => (showSettings = false)}
-  />{/if}{#if showThemePicker}<ThemePicker
+{#if PreviewComp}
+  {@const PreviewView = PreviewComp}
+  <PreviewView
+    file={previewFile}
+    siblings={sorted.filter((f) => !f.is_dir)}
+    onNavigate={(f) => (previewFile = f)}
+    onClose={() => (previewFile = null)}
+  />
+{/if}<ShareDialog file={shareFile} onClose={() => (shareFile = null)} />{#if EditorComp}
+  {@const EditorView = EditorComp}
+  <EditorView file={editorFile} onClose={() => (editorFile = null)} />
+{/if}
+{#if showSettings && SettingsComp}
+  {@const SettingsView = SettingsComp}
+  <SettingsView onClose={() => (showSettings = false)} />
+{/if}{#if showThemePicker}<ThemePicker
     onClose={() => (showThemePicker = false)}
   />{/if}{#if showTrash}<Trash
     onClose={() => {

@@ -1,33 +1,33 @@
-# Stage 1: Build Frontend
-FROM node:22-alpine AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-COPY scripts/ /app/scripts/
-RUN npm run check && npm test && npm run build
+# Fileship (Rust) — Production Image
+# Multi-stage: Build mit LTO/fat-Profil, Runtime minimal (distroless-ish).
 
-# Stage 2: Build Backend
-FROM golang:1.23-alpine AS backend-builder
-RUN apk add --no-cache gcc musl-dev
+# ── Stage 1: Build ──────────────────────────────────────────────────────────
+FROM rust:1.85-slim-bookworm AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-COPY . .
-# Copy built frontend AFTER COPY . . so it's available for go:embed
-COPY --from=frontend-builder /app/frontend/dist ./internal/static/dist
-RUN CGO_ENABLED=1 go test -mod=vendor ./... && go vet -mod=vendor ./...
-RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o fileship ./cmd/fileship
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY frontend/dist ./frontend/dist
+RUN cargo test --release --all-targets && \
+    cargo build --release && strip target/release/fileship
 
-# Stage 3: Final minimal image
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata ffmpeg
-WORKDIR /app
-COPY --from=backend-builder /app/fileship /usr/local/bin/fileship
-RUN mkdir -p /data
+# ── Stage 2: Runtime ────────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
 
-EXPOSE 8080
-ENV ROOT_PATH=/data
-ENV DB_PATH=/app/fileship.db
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates ffmpeg libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/target/release/fileship /usr/local/bin/fileship
+
+ENV PORT=8080 \
+    DB_PATH=/data/fileship.db \
+    ROOT_PATH=/data
 
 VOLUME ["/data"]
-
-CMD ["/usr/local/bin/fileship"]
+EXPOSE 8080
+ENTRYPOINT ["fileship"]

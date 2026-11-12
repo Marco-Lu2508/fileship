@@ -5,7 +5,14 @@
   import { theme, applyTheme } from './stores/theme.js'
   import Login from './components/Login.svelte'
   import Browser from './components/Browser.svelte'
-  import Admin from './components/Admin.svelte'
+  import Skeleton from './components/Skeleton.svelte'
+
+  // Admin (~1.200 LOC) wird erst geladen, wenn die Route es braucht —
+  // spart ca. ein Viertel des initialen JS-Bundles.
+  let AdminComp = null
+  $: if (route === '/admin' && $user?.is_admin && !AdminComp) {
+    import('./components/Admin.svelte').then((m) => (AdminComp = m.default))
+  }
 
   let ready = false
 
@@ -50,7 +57,12 @@
 {:else if !$user}
   <Login />
 {:else if route === '/admin' && $user.is_admin}
-  <Admin />
+  {#if AdminComp}
+    {@const AdminView = AdminComp}
+    <AdminView />
+  {:else}
+    <Skeleton rows={10} />
+  {/if}
 {:else}
   <Browser />
 {/if}
