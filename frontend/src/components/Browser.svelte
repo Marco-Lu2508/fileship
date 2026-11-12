@@ -142,11 +142,16 @@
     event.preventDefault()
     uploader?.upload(event.dataTransfer.files)
   }
+  // The storage widget updates in the background once the first number is
+  // there — the very first load shows the app's skeleton, later refreshes
+  // silently swap the value, so navigating never flashes "Loading..." again.
+  let storageLoaded = false
   async function loadStorage() {
     try {
       storage = await (
         await requireOK(await apiFetch('/api/me/settings'))
       ).json()
+      storageLoaded = true
     } catch {}
   }
   function startTransfer(mode, paths = [...get(selected)]) {
@@ -741,7 +746,7 @@
       {/if}
     </nav>
     <div class="sidebar-bottom">
-      {#if storage}<div class="storage-summary">
+      {#if storageLoaded && storage}<div class="storage-summary">
           <span>{$i18n('Storage used')}</span><strong
             >{formatBytes(storage.disk_usage, $locale)}</strong
           >{#if storage.quota_bytes > 0}<progress
