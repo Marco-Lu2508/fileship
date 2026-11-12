@@ -363,6 +363,22 @@ impl Db {
         );
     }
 
+    /// Delete audit entries older than `days` so the log (and the DB with
+    /// it) doesn't grow unbounded. created_at is stored in Go-sqlite UTC
+    /// text format, which SQLite's julianday() parses correctly.
+    pub fn prune_audit_log(&self, days: i64) -> i64 {
+        match self.conn.lock().unwrap().execute(
+            "DELETE FROM audit_log WHERE julianday(created_at) < julianday('now', ?)",
+            params![format!("-{} days", days)],
+        ) {
+            Ok(n) => n as i64,
+            Err(e) => {
+                eprintln!("audit prune failed: {}", e);
+                0
+            }
+        }
+    }
+
     pub fn get_audit_log(&self, limit: i64) -> Vec<AuditEntry> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn

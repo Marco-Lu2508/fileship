@@ -56,6 +56,12 @@ export async function loadFiles(path = '', options = {}) {
   if (!sameListing) selected.set(new Set())
   try {
     const query = new URLSearchParams({ path, per_page: 100, ...listOptions })
+    // Option to also list pseudo-FS roots (/proc, /sys, /dev...) — off by default.
+    try {
+      if (localStorage.getItem('fileship_show_pseudo') === '1') {
+        query.set('show_pseudo', '1')
+      }
+    } catch {}
     const res = await requireOK(
       await apiFetch(`/api/files?${query}`, { signal: controller.signal }),
       'Could not load this folder'

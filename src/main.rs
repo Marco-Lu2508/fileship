@@ -114,7 +114,7 @@ async fn main() {
     //
     // Compression only on the static fallback (SPA/WebDAV): API JSON and
     // especially file downloads (potentially GB-sized, possibly already compressed)
-    // bleiben unkomprimiert.
+    // stay uncompressed.
     let static_app = axum::Router::<()>::new()
         .fallback(move |req: axum::http::Request<axum::body::Body>| {
             let dav_state = dav_state.clone();
@@ -136,14 +136,23 @@ async fn main() {
         .layer(axum::Extension(cfg.root_path.clone()))
         .layer(axum::Extension(state_for_ext));
 
+    // Cap the audit log at AUDIT_RETENTION_DAYS (default 90).
+    let retention_days: i64 = env_or("AUDIT_RETENTION_DAYS", "90").parse().unwrap_or(90);
+    let pruned = database.prune_audit_log(retention_days);
+    if pruned > 0 {
+        eprintln!("pruned {} audit entries older than {} days", pruned, retention_days);
+    }
+
     let addr = format!("0.0.0.0:{}", cfg.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap_or_else(|e| {
         eprintln!("bind {}: {}", addr, e);
         std::process::exit(1);
     });
 
-    if tls {
-        eprintln!("🚀 Fileship running on https://localhost:{} (TLS)", cfg.port);
+    // HTTP/1.1 + HTTP/2 on the same port (h2c prior-knowledge / upgrade, and
+    // ALPN "h2"/"http/1.1" for TLS simultaneously) via hyper's auto builder.
+    let acceptor: Option<tokio_rustls::TlsAcceptor> = if tls {
+        eprintln!("🚀 Fileship running on https://localhost:{} (TLS, HTTP/1.1 + HTTP/2)", cfg.port);
         eprintln!("   Root: {} | DB: {}", cfg.root_path, cfg.db_path);
         let mut cert_reader = std::io::BufReader::new(std::fs::File::open(&cfg.tls_cert).unwrap());
         let certs: Vec<rustls::pki_types::CertificateDer<'static>> = rustls_pemfile::certs(&mut cert_reader)
@@ -151,52 +160,58 @@ async fn main() {
             .collect();
         let mut key_reader = std::io::BufReader::new(std::fs::File::open(&cfg.tls_key).unwrap());
         let key = rustls_pemfile::pkcs8_private_keys(&mut key_reader).next().unwrap().unwrap();
-        let server_config = rustls::ServerConfig::builder()
+        let mut server_config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(certs, rustls::pki_types::PrivateKeyDer::Pkcs8(key))
             .unwrap();
-        let tls_listener = TlsListener { inner: listener, acceptor: tokio_rustls::TlsAcceptor::from(Arc::new(server_config)) };
-        axum::serve(tls_listener, app)
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
-                eprintln!("shutting down...");
-            })
-            .await
-            .unwrap_or_else(|e| {
-                eprintln!("serve: {}", e);
-            });
+        server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Some(tokio_rustls::TlsAcceptor::from(Arc::new(server_config)))
     } else {
-        eprintln!("🚀 Fileship running on http://localhost:{}", cfg.port);
+        eprintln!("🚀 Fileship running on http://localhost:{} (HTTP/1.1 + HTTP/2)", cfg.port);
         eprintln!("   Root: {} | DB: {}", cfg.root_path, cfg.db_path);
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
+        None
+    };
+
+    loop {
+        tokio::select! {
+            res = listener.accept() => {
+                let (stream, _addr) = match res {
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("accept: {}", e);
+                        continue;
+                    }
+                };
+                let app = hyper_util::service::TowerToHyperService::new(app.clone());
+                let acceptor = acceptor.clone();
+                tokio::spawn(async move {
+                    use hyper_util::rt::TokioIo;
+                    let builder = hyper_util::server::conn::auto::Builder::new(
+                        hyper_util::rt::TokioExecutor::new(),
+                    );
+                    let conn = match acceptor {
+                        Some(acc) => match acc.accept(stream).await {
+                            Ok(tls_stream) => builder
+                                .serve_connection_with_upgrades(TokioIo::new(tls_stream), app)
+                                .await,
+                            Err(e) => {
+                                eprintln!("tls handshake: {}", e);
+                                return;
+                            }
+                        },
+                        None => builder
+                            .serve_connection_with_upgrades(TokioIo::new(stream), app)
+                            .await,
+                    };
+                    if let Err(e) = conn {
+                        eprintln!("connection: {}", e);
+                    }
+                });
+            }
+            _ = tokio::signal::ctrl_c() => {
                 eprintln!("shutting down...");
-            })
-            .await
-            .unwrap_or_else(|e| {
-                eprintln!("serve: {}", e);
-            });
-    }
-}
-
-/// axum::serve-compatible TLS listener (tokio-rustls 0.26: no more LazyConfigAcceptor).
-struct TlsListener {
-    inner: tokio::net::TcpListener,
-    acceptor: tokio_rustls::TlsAcceptor,
-}
-
-impl axum::serve::Listener for TlsListener {
-    type Addr = std::net::SocketAddr;
-    type Io = tokio_rustls::server::TlsStream<tokio::net::TcpStream>;
-
-    fn local_addr(&self) -> std::io::Result<Self::Addr> {
-        self.inner.local_addr()
-    }
-
-    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
-        let (stream, addr) = self.inner.accept().await.expect("accept");
-        let tls = self.acceptor.clone().accept(stream).await.expect("tls handshake");
-        (tls, addr)
+                break;
+            }
+        }
     }
 }

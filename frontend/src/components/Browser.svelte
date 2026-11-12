@@ -440,6 +440,20 @@
     viewMode = mode
     localStorage.setItem('fileship_view', mode)
   }
+  let showPseudo = (() => {
+    try {
+      return localStorage.getItem('fileship_show_pseudo') === '1'
+    } catch {
+      return false
+    }
+  })()
+  function togglePseudo() {
+    showPseudo = !showPseudo
+    try {
+      localStorage.setItem('fileship_show_pseudo', showPseudo ? '1' : '0')
+    } catch {}
+    loadFiles(get(currentPath), { page: 1, sort_by: sortKey, sort_asc: sortAsc })
+  }
   function setFilter(value) {
     filter = value
     selected.set(new Set())
@@ -842,6 +856,14 @@
                 ><Icon name="image" size={17} /></button
               >
             </div>
+            <button
+              class="icon-btn"
+              class:active={showPseudo}
+              aria-label={$i18n('Show system folders (/proc, /sys, /dev)')}
+              aria-pressed={showPseudo}
+              title={$i18n('Show system folders (/proc, /sys, /dev)')}
+              onclick={togglePseudo}><Icon name="eye" size={17} /></button
+            >
           </div>
         </div>
         <div class="list-meta">

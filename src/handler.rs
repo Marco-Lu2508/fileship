@@ -46,6 +46,7 @@ fn empty(status: StatusCode) -> Response {
 pub fn router(_state: AppState) -> Router<AppState> {
     use axum::routing::{get, post, put, delete};
     let public = Router::new()
+        .route("/healthz", get(healthz))
         .route("/api/auth/login", post(login))
         .route("/api/auth/refresh", post(refresh))
         .route("/api/auth/logout", post(logout))
@@ -564,10 +565,74 @@ async fn list_files(State(state): State<AppState>, auth: Auth, req: Request<Body
             f.starred = true;
         }
     }
+    // Hide pseudo-filesystem roots (/proc, /sys, /dev, cgroup...) from the
+    // listing unless explicitly requested — their virtual entries clutter
+    // the UI when the root path is a bind-mounted host root ("/").
+    let show_pseudo = q.get("show_pseudo").map(|v| v == "1" || v == "true").unwrap_or(false);
+    if !show_pseudo {
+        let root_abs = root.clone();
+        result.files.retain(|f| {
+            if !f.is_dir {
+                return true;
+            }
+            match fsops::resolve(&root_abs, &f.path) {
+                Ok(abs) => !fsops::is_pseudo_fs(std::path::Path::new(&abs)),
+                Err(_) => true,
+            }
+        });
+        result.total = result.total.min(result.files.len() as i64);
+    }
     if state.db.index_count_for_user(auth.user_id()) == 0 {
         state.indexer.trigger_reindex(auth.user_id(), root);
     }
     json(StatusCode::OK, &result)
+}
+
+/// Read image EXIF and return only the tags worth showing in the Details
+/// view (camera, time, exposure, GPS, dimensions). Unknown/binary tags are
+/// dropped; strings come back as plain text.
+fn read_exif(abs: &str) -> Option<serde_json::Value> {
+    use little_exif::filetype::FileExtension;
+    use little_exif::metadata::Metadata;
+    let bytes = std::fs::read(abs).ok()?;
+    if bytes.len() > (16 << 20) {
+        return None;
+    }
+    let metadata = Metadata::new_from_vec(&bytes, FileExtension::JPEG).ok()?;
+    let mut map = serde_json::Map::new();
+    for tag in &metadata {
+        let debug = format!("{:?}", tag);
+        let Some(rest) = debug.strip_prefix("ExifTag::") else {
+            continue;
+        };
+        let Some(open) = rest.find('(') else {
+            continue;
+        };
+        let name = &rest[..open];
+        // Skip binary/unknown tags and anything huge.
+        if matches!(name, "MakerNote" | "ThumbnailOffset" | "ThumbnailLength" | "StripOffsets" | "StripByteCounts" | "UserComment")
+            || name.starts_with("Unknown")
+        {
+            continue;
+        }
+        let raw = rest[open + 1..rest.len() - 1].trim();
+        let value = if let Some(s) = raw.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+            s.to_string()
+        } else if raw.starts_with('[') {
+            // Numeric vector like [42] or [1, 2, 3]
+            raw.trim_matches(['[', ']']).split(',').map(|x| x.trim().to_string()).collect::<Vec<_>>().join(", ")
+        } else {
+            raw.to_string()
+        };
+        if !value.is_empty() && map.len() < 48 {
+            map.insert(name.to_string(), serde_json::Value::String(value));
+        }
+    }
+    if map.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(map))
+    }
 }
 
 async fn file_info(State(state): State<AppState>, auth: Auth, req: Request<Body>) -> Response {
@@ -598,6 +663,11 @@ async fn file_info(State(state): State<AppState>, auth: Auth, req: Request<Body>
         "files": 0,
         "folders": 0,
     });
+    if !md.is_dir() {
+        if let Some(exif) = read_exif(&abs) {
+            out["exif"] = exif;
+        }
+    }
     if md.is_dir() {
         out["size"] = serde_json::json!(0);
         let perms = if auth.is_admin() { Vec::new() } else { state.db.list_path_permissions(auth.user_id()) };
@@ -1601,11 +1671,50 @@ fn serve_archive(state: &AppState, req: &Request<Body>, paths: &[String], format
             }
         }
     }
-    let mut buf: Vec<u8> = Vec::new();
-    if let Err(e) = fsops::write_archive(&entries, format, &mut buf) {
-        return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
-    }
-    let mut res = Response::new(Body::from(buf));
+    // Stream the archive: entries are written on a blocking thread into a
+    // channel, the HTTP body pulls chunks as they come. No temp file, no
+    // full archive in RAM — works for multi-GB folders.
+    let format_owned = format.to_string();
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(32);
+    tokio::task::spawn_blocking(move || {
+        struct ChanWriter {
+            tx: tokio::sync::mpsc::Sender<Result<bytes::Bytes, std::io::Error>>,
+            buf: Vec<u8>,
+        }
+        impl std::io::Write for ChanWriter {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.buf.extend_from_slice(data);
+                if self.buf.len() >= (8 << 20) {
+                    self.flush()?;
+                }
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                if self.buf.is_empty() {
+                    return Ok(());
+                }
+                let chunk = bytes::Bytes::from(std::mem::take(&mut self.buf));
+                match self.tx.blocking_send(Ok(chunk)) {
+                    Ok(()) => Ok(()),
+                    Err(_) => Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "client disconnected")),
+                }
+            }
+        }
+        impl Drop for ChanWriter {
+            fn drop(&mut self) {
+                let _ = self.flush();
+            }
+        }
+        let mut w = ChanWriter { tx, buf: Vec::with_capacity(1 << 20) };
+        if let Err(e) = fsops::write_archive(&entries, &format_owned, &mut w) {
+            eprintln!("archive stream failed: {}", e);
+        }
+    });
+    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+        let item = rx.recv().await?;
+        Some((item, rx))
+    });
+    let mut res = Response::new(Body::from_stream(stream));
     res.headers_mut().insert(header::CONTENT_TYPE, mime.parse().unwrap_or(header::HeaderValue::from_static("application/zip")));
     res.headers_mut().insert(
         header::CONTENT_DISPOSITION,
@@ -1615,6 +1724,10 @@ fn serve_archive(state: &AppState, req: &Request<Body>, paths: &[String], format
 }
 
 // ── Unzip / Text / Thumb / Search / Reindex ────────────
+
+async fn healthz() -> Response {
+    json(StatusCode::OK, &serde_json::json!({"ok": true}))
+}
 
 #[derive(serde::Deserialize)]
 struct UnzipBody {

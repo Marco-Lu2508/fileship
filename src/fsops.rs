@@ -330,7 +330,7 @@ pub fn dir_size(path: &str) -> FsResult<i64> {
 }
 
 /// True for pseudo-filesystems whose files have virtual (non-disk) sizes.
-fn is_pseudo_fs(path: &Path) -> bool {
+pub fn is_pseudo_fs(path: &Path) -> bool {
     use std::ffi::CString;
     let Ok(cpath) = CString::new(path.to_string_lossy().into_owned()) else {
         return false;
@@ -941,40 +941,188 @@ fn collect_archive_entries(
     Ok(())
 }
 
-pub fn write_archive(entries: &[ArchiveEntry], format: &str, output: &mut Vec<u8>) -> FsResult<()> {
+pub fn write_archive<W: Write>(entries: &[ArchiveEntry], format: &str, mut output: W) -> FsResult<()> {
     match format {
         "zip" => write_zip(entries, output),
-        "tar" => write_tar(entries, output, false),
-        "targz" => write_tar(entries, output, true),
+        "tar" => write_tar(entries, &mut output, false),
+        "targz" => write_tar(entries, &mut output, true),
         _ => ferr("unsupported archive format"),
     }
 }
 
-fn write_zip(entries: &[ArchiveEntry], output: &mut Vec<u8>) -> FsResult<()> {
-    let mut zw = zip::ZipWriter::new(std::io::Cursor::new(output));
+/// Streaming ZIP writer over a non-seekable sink (no temp file, no RAM
+/// buffering of whole archives). Entries use the data-descriptor flag
+/// (bit 3): CRC/sizes are written after each file's data, then the central
+/// directory is emitted at the end with the real offsets we tracked.
+fn write_zip<W: Write>(entries: &[ArchiveEntry], mut out: W) -> FsResult<()> {
+    struct CentralDir {
+        name: Vec<u8>,
+        is_dir: bool,
+        mode: u32,
+        method: u16,
+        mod_time: u16,
+        mod_date: u16,
+        crc: u32,
+        comp_size: u32,
+        uncomp_size: u32,
+        local_offset: u64,
+    }
+    let mut central: Vec<CentralDir> = Vec::new();
+    let mut offset: u64 = 0;
+
+    macro_rules! w {
+        ($buf:expr) => {{
+            out.write_all($buf)?;
+            offset += $buf.len() as u64;
+        }};
+    }
+
     for entry in entries {
-        let opts = if entry.is_dir {
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored)
-                .unix_permissions(entry.mode)
-        } else {
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .unix_permissions(entry.mode)
-        };
         let name = if entry.is_dir {
             format!("{}/", entry.name.trim_end_matches('/'))
         } else {
             entry.name.clone()
         };
-        zw.start_file(name, opts).map_err(|e| FsError(e.to_string()))?;
+        let name_bytes = name.as_bytes();
+        let method: u16 = if entry.is_dir { 0 } else { 8 }; // stored / deflated
+        let flags: u16 = 0x08 | 0x800; // data descriptor + UTF-8 names
+        let zip_time = dos_datetime(entry.mtime);
+        let local_offset = offset;
+
+        let mut header = Vec::with_capacity(30);
+        header.extend_from_slice(b"PK\x03\x04");
+        header.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        header.extend_from_slice(&flags.to_le_bytes());
+        header.extend_from_slice(&method.to_le_bytes());
+        header.extend_from_slice(&((zip_time & 0xFFFF) as u16).to_le_bytes()); // mod time
+        header.extend_from_slice(&((zip_time >> 16) as u16).to_le_bytes()); // mod date
+        header.extend_from_slice(&0u32.to_le_bytes()); // crc (data descriptor)
+        header.extend_from_slice(&0u32.to_le_bytes()); // comp size
+        header.extend_from_slice(&0u32.to_le_bytes()); // uncomp size
+        header.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes()); // extra len
+        header.extend_from_slice(name_bytes);
+        w!(&header);
+
+        let mut crc = crc32fast::Hasher::new();
+        let mut comp_size: u64 = 0;
+        let mut uncomp_size: u64 = 0;
         if !entry.is_dir {
-            let data = std::fs::read(&entry.abs_path)?;
-            zw.write_all(&data)?;
+            let f = std::fs::File::open(&entry.abs_path)?;
+            let mut br = std::io::BufReader::with_capacity(1 << 20, f);
+            // Write compressed bytes to a small counting sink so each chunk
+            // lands in the output (and offsets) immediately.
+            let mut sink = CountingWriter { inner: &mut out, written: 0 };
+            {
+                let mut enc = flate2::write::DeflateEncoder::new(&mut sink, flate2::Compression::fast());
+                let mut buf = vec![0u8; 1 << 20];
+                loop {
+                    let n = std::io::Read::read(&mut br, &mut buf)?;
+                    if n == 0 {
+                        break;
+                    }
+                    crc.update(&buf[..n]);
+                    enc.write_all(&buf[..n])?;
+                    uncomp_size += n as u64;
+                }
+                enc.finish()?;
+            }
+            comp_size = sink.written;
+            offset += comp_size;
         }
+        let crc = crc.finalize();
+
+        // Data descriptor: signature + crc + comp + uncomp sizes.
+        let mut dd = Vec::with_capacity(16);
+        dd.extend_from_slice(b"PK\x07\x08");
+        dd.extend_from_slice(&crc.to_le_bytes());
+        dd.extend_from_slice(&(comp_size as u32).to_le_bytes());
+        dd.extend_from_slice(&(uncomp_size as u32).to_le_bytes());
+        w!(&dd);
+
+        central.push(CentralDir {
+            name: name_bytes.to_vec(),
+            is_dir: entry.is_dir,
+            mode: entry.mode,
+            method,
+            mod_time: (zip_time & 0xFFFF) as u16,
+            mod_date: (zip_time >> 16) as u16,
+            crc,
+            comp_size: comp_size as u32,
+            uncomp_size: uncomp_size as u32,
+            local_offset,
+        });
     }
-    zw.finish().map_err(|e| FsError(e.to_string()))?;
+
+    // Central directory.
+    let cd_offset = offset;
+    let mut cd_size: u64 = 0;
+    for e in &central {
+        let mut cd = Vec::with_capacity(46 + e.name.len());
+        cd.extend_from_slice(b"PK\x01\x02");
+        cd.extend_from_slice(&20u16.to_le_bytes()); // version made by
+        cd.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        cd.extend_from_slice(&(0x08u16 | 0x800).to_le_bytes()); // flags
+        cd.extend_from_slice(&e.method.to_le_bytes());
+        cd.extend_from_slice(&e.mod_time.to_le_bytes());
+        cd.extend_from_slice(&e.mod_date.to_le_bytes());
+        cd.extend_from_slice(&e.crc.to_le_bytes());
+        cd.extend_from_slice(&e.comp_size.to_le_bytes());
+        cd.extend_from_slice(&e.uncomp_size.to_le_bytes());
+        cd.extend_from_slice(&(e.name.len() as u16).to_le_bytes());
+        cd.extend_from_slice(&0u16.to_le_bytes()); // extra
+        cd.extend_from_slice(&0u16.to_le_bytes()); // comment
+        cd.extend_from_slice(&0u16.to_le_bytes()); // disk number
+        cd.extend_from_slice(&0u16.to_le_bytes()); // internal attrs
+        cd.extend_from_slice(&e.mode.wrapping_shl(16).to_le_bytes()); // external attrs (unix mode)
+        cd.extend_from_slice(&(e.local_offset as u32).to_le_bytes());
+        cd.extend_from_slice(&e.name);
+        w!(&cd);
+        cd_size += cd.len() as u64;
+    }
+
+    // End of central directory.
+    let mut eocd = Vec::with_capacity(22);
+    eocd.extend_from_slice(b"PK\x05\x06");
+    eocd.extend_from_slice(&0u16.to_le_bytes()); // disk
+    eocd.extend_from_slice(&0u16.to_le_bytes()); // cd start disk
+    eocd.extend_from_slice(&(central.len() as u16).to_le_bytes());
+    eocd.extend_from_slice(&(central.len() as u16).to_le_bytes());
+    eocd.extend_from_slice(&(cd_size as u32).to_le_bytes());
+    eocd.extend_from_slice(&(cd_offset as u32).to_le_bytes());
+    eocd.extend_from_slice(&0u16.to_le_bytes()); // comment len
+    w!(&eocd);
     Ok(())
+}
+
+struct CountingWriter<'a, W: Write> {
+    inner: &'a mut W,
+    written: u64,
+}
+
+impl<W: Write> Write for CountingWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.written += n as u64;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// DOS date/time pair packed into one u32 (time in low 16, date in high
+/// 16) — the ZIP local/central headers store them as two u16s.
+fn dos_datetime(unix_secs: i64) -> u32 {
+    use chrono::Datelike;
+    use chrono::TimeZone;
+    use chrono::Timelike;
+    let dt = chrono::Local.timestamp_opt(unix_secs, 0).single()
+        .unwrap_or_else(|| chrono::Local.timestamp_opt(0, 0).unwrap());
+    let time: u16 = ((dt.hour() as u16) << 11) | ((dt.minute() as u16) << 5) | ((dt.second() as u16) >> 1);
+    let year = dt.year().max(1980).min(2107) as u16;
+    let date: u16 = ((year - 1980) << 9) | ((dt.month() as u16) << 5) | (dt.day() as u16);
+    ((date as u32) << 16) | (time as u32)
 }
 
 fn write_tar<W: Write>(entries: &[ArchiveEntry], output: &mut W, gzip: bool) -> FsResult<()> {

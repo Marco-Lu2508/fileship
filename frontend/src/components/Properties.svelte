@@ -73,6 +73,15 @@
         <dt>{$i18n('Folders')}</dt>
         <dd>{info.folders}</dd>{/if}
     </dl>
+    {#if info.exif && Object.keys(info.exif).length}
+      <h3>{$i18n('Image metadata (EXIF)')}</h3>
+      <dl>
+        {#each Object.entries(info.exif) as [key, value]}
+          <dt>{key}</dt>
+          <dd>{value}</dd>
+        {/each}
+      </dl>
+    {/if}
     {#if !info.is_dir}<label class="field"
         >{$i18n('Checksum')}<select
           bind:value={algorithm}

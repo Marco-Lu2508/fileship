@@ -38,6 +38,11 @@ rustls-pemfile = "2"
 tokio-rustls = "0.26"
 rand_core = "0.10"
 libc = "0.2.191"
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+little_exif = "0.6.23"
+hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
+bytes = "1.12.1"
+crc32fast = "1.5.5"
 
 [profile.release]
 opt-level = 3
